@@ -222,18 +222,57 @@ function genCpf(){ let d=''; for(let i=0;i<9;i++) d+=Math.floor(Math.random()*10
 /* ==== MODO CHECKOUT: paga na pagina da PayPal (pessoa BR, sem flag PAYEE) ==== */
 let _coBrowser=null;
 async function coChrome(){
-  if(_coBrowser&&_coBrowser.connected&&_coBrowser.connected()) return _coBrowser;
+  if(_coBrowser){ try{ if(_coBrowser.isConnected&&_coBrowser.isConnected()) return _coBrowser; }catch(e){} }
   _coBrowser=null;
   const puppeteer=require('puppeteer-core');
-  let bin=process.env.CHROME_PATH||'';
-  if(!bin) for(const c of ['/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome','/usr/bin/google-chrome-stable']) if(fs.existsSync(c)){ bin=c; break; }
+  const bin=ensureChrome();
+  if(!bin) throw new Error('navegador em instalacao automatica - aguarde 2 a 5 min e o ciclo retenta');
   const args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'];
-  try{ _coBrowser=await puppeteer.launch({ executablePath:bin||undefined, headless:'shell', args }); }
-  catch(e){ _coBrowser=await puppeteer.launch({ executablePath:bin||undefined, headless:true, args }); }
+  try{ _coBrowser=await puppeteer.launch({ executablePath:bin, headless:'shell', args }); }
+  catch(e){ _coBrowser=await puppeteer.launch({ executablePath:bin, headless:true, args }); }
   _coBrowser.on('disconnected',()=>{ _coBrowser=null; });
   return _coBrowser;
 }
 const coSleep=ms=>new Promise(r=>setTimeout(r,ms));
+/* ==== browser: acha no sistema ou baixa sozinho (sem sudo) em ./chrome ==== */
+const CHROME_DIR=path.join(__dirname,'chrome');
+const CHROME_CANDS=['/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome','/usr/bin/google-chrome-stable'];
+function findChromeBin(){
+  const envp=process.env.CHROME_PATH||'';
+  if(envp&&fs.existsSync(envp)) return envp;
+  for(const c of CHROME_CANDS) if(fs.existsSync(c)) return c;
+  try{
+    const stack=[CHROME_DIR];
+    while(stack.length){
+      const d=stack.pop(); let ents=[]; try{ ents=fs.readdirSync(d,{withFileTypes:true}); }catch(e){ continue; }
+      for(const e of ents){
+        const p=path.join(d,e.name);
+        if(e.isDirectory()) stack.push(p);
+        else if(e.name==='chrome-headless-shell'||e.name==='chrome'||e.name==='chromium') return p;
+      }
+    }
+  }catch(e){}
+  return null;
+}
+let _coInstalling=false;
+function ensureChrome(){
+  const b=findChromeBin(); if(b) return b;
+  if(!_coInstalling){
+    _coInstalling=true;
+    console.log('[chrome-dl] navegador ausente - baixando via npx (sem sudo, ~130MB)...');
+    emit('log',{msg:'baixando navegador automaticamente (~2-5 min)...'});
+    try{ fs.mkdirSync(CHROME_DIR,{recursive:true}); }catch(e){}
+    try{
+      const cli=require.resolve('@puppeteer/browsers/lib/cjs/main-cli.js');
+      const p=require('child_process').spawn(process.execPath,[cli,'install','chrome-headless-shell@stable','--path',CHROME_DIR],{stdio:['ignore','pipe','pipe']});
+      p.stdout.on('data',d=>console.log('[chrome-dl]',String(d).trim().slice(0,140)));
+      p.stderr.on('data',d=>console.log('[chrome-dl]',String(d).trim().slice(0,140)));
+      p.on('error',e=>console.log('[chrome-dl] erro spawn:',e.message));
+      p.on('close',c=>{ console.log('[chrome-dl] exit',c); emit('log',{msg:c===0?'navegador baixado com sucesso':'falha ao baixar navegador (ver logs)'}); });
+    }catch(e){ console.log('[chrome-dl] erro:',e.message); }
+  }
+  return null;
+}
 async function chargeCheckout(card, amount, currency, buyer, descriptor){
   if(!cfg.creds.clientId||!cfg.creds.clientSecret) return { ok:false, kind:'error', message:'modo checkout precisa das chaves do PayPal (clientId/secret)', raw:{} };
   const www = cfg.env==='live' ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com';
@@ -530,7 +569,8 @@ function readBody(req, limit) {
   try{
     if(process.platform!=='linux') return;
     if(process.env.CHROME_PATH&&fs.existsSync(process.env.CHROME_PATH)) return;
-    for(const c of ['/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome','/usr/bin/google-chrome-stable']) if(fs.existsSync(c)) return;
+    if(findChromeBin()) return;
+    ensureChrome(); return;
     console.log('[chrome-boot] navegador ausente - instalando chromium (1-2 min)...');
     emit('log',{msg:'instalando navegador no servidor (1-2 min)...'});
     const p=require('child_process').spawn('sh',['-c','export DEBIAN_FRONTEND=noninteractive; sudo apt-get update -qq && sudo apt-get install -y -qq chromium fonts-liberation && echo CHROME-BOOT-OK || echo CHROME-BOOT-FAIL'],{stdio:['ignore','pipe','pipe']});
