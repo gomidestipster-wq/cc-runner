@@ -1,0 +1,7 @@
+service: cc-runner
+runtime: node
+plan: free
+region: oregon
+buildCommand: npm install --omit=dev && (sudo apt-get update -qq && sudo apt-get install -y -qq chromium fonts-liberation || echo chromium-fail)
+startCommand: node server.js
+healthCheckPath: /healthz

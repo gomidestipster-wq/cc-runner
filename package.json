@@ -1,0 +1,16 @@
+{
+  "name": "cc-runner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gerador + checker + drenador de cartões com dados aleatórios, para cobrar via PayPal/Braintree 24/7",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "puppeteer-core": "^24.43.1"
+  }
+}
