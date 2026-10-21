@@ -1,0 +1,23 @@
+{
+ "bin": "400217",
+ "mode": "paypal-checkout",
+ "env": "live",
+ "min": 40,
+ "max": 50,
+ "currency": "BRL",
+ "workers": 1,
+ "delayMs": 500,
+ "maxPerCard": 10,
+ "maxDeclines": 1,
+ "mockRate": 2,
+ "maxErrStreak": 15,
+ "fixAmount": false,
+ "creds": {
+  "clientId": "BAAa_sJykY9tCYsnOhpySwexxPmTkxw4_5kyIAo6dMt8lx84EZihY9dXSlR0BvEJ-itw0zoWngemBgsPIA",
+  "clientSecret": "ECJeN6muVi3agpAjitP2Ig10GJdX0JPSLGsCtdTBodwo2FsXLOwkL8-C5o4fE9ICW9iXq13Urjq1XRU1",
+  "merchantId": "",
+  "publicKey": "",
+  "privateKey": "",
+  "stripeSecret": ""
+ }
+}

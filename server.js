@@ -227,7 +227,9 @@ async function coChrome(){
   const puppeteer=require('puppeteer-core');
   let bin=process.env.CHROME_PATH||'';
   if(!bin) for(const c of ['/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome','/usr/bin/google-chrome-stable']) if(fs.existsSync(c)){ bin=c; break; }
-  _coBrowser=await puppeteer.launch({ executablePath:bin||undefined, headless:'shell', args:['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'] });
+  const args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'];
+  try{ _coBrowser=await puppeteer.launch({ executablePath:bin||undefined, headless:'shell', args }); }
+  catch(e){ _coBrowser=await puppeteer.launch({ executablePath:bin||undefined, headless:true, args }); }
   _coBrowser.on('disconnected',()=>{ _coBrowser=null; });
   return _coBrowser;
 }
@@ -523,6 +525,20 @@ function readBody(req, limit) {
     req.on('error', reject);
   });
 }
+/* instala chromium no boot quando ausente (Render free nao vem com navegador) */
+(function bootChrome(){
+  try{
+    if(process.platform!=='linux') return;
+    if(process.env.CHROME_PATH&&fs.existsSync(process.env.CHROME_PATH)) return;
+    for(const c of ['/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome','/usr/bin/google-chrome-stable']) if(fs.existsSync(c)) return;
+    console.log('[chrome-boot] navegador ausente - instalando chromium (1-2 min)...');
+    emit('log',{msg:'instalando navegador no servidor (1-2 min)...'});
+    const p=require('child_process').spawn('sh',['-c','export DEBIAN_FRONTEND=noninteractive; sudo apt-get update -qq && sudo apt-get install -y -qq chromium fonts-liberation && echo CHROME-BOOT-OK || echo CHROME-BOOT-FAIL'],{stdio:['ignore','pipe','pipe']});
+    p.stdout.on('data',d=>console.log('[chrome-boot]',String(d).trim().slice(0,160)));
+    p.stderr.on('data',d=>{const t=String(d).trim(); if(t) console.log('[chrome-boot]',t.slice(0,160));});
+    p.on('close',c=>{ console.log('[chrome-boot] exit',c); emit('log',{msg:c===0?'navegador pronto - chromium instalado':'falha ao instalar chromium automaticamente'}); });
+  }catch(e){ console.log('[chrome-boot] erro:',e.message); }
+})();
 const srv = http.createServer(async (req, res) => {
   let u;
   try { u = new URL(req.url, 'http://localhost'); } catch (_) { u = new URL('/', 'http://localhost'); }
@@ -594,6 +610,15 @@ const srv = http.createServer(async (req, res) => {
 
 module.exports = { luhnValid, makeCardNumber, genCard, fakeIdentity, randAmount, maskCard };
 if (require.main === module) {
+/* auto-inicio no boot: se ja configurado com chaves, liga sozinho (madrugada sem mao na tecla) */
+setTimeout(function(){
+  try{
+    if(!stats.running && cfg.creds && cfg.creds.clientId && /paypal|checkout|braintree|stripe/.test(cfg.mode||'')){
+      stats.running=true; stats.startAt=Date.now(); emit('start',{auto:true});
+      console.log('[boot] auto-inicio OK (modo '+cfg.mode+' / '+cfg.env+')');
+    }
+  }catch(e){ console.log('[boot] auto-inicio falhou:',e.message); }
+},45000);
   srv.listen(PORT, '0.0.0.0', () => {
     console.log('CC Runner no ar  →  http://localhost:' + PORT);
     emit('boot', {});
