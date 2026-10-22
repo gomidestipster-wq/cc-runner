@@ -536,6 +536,40 @@ const signupTry=async()=>{
         else if(/cvv|cvn/i.test(f.id)){ if(!(await fillField('#'+f.id,String(card.cvv)))) await fillKbd('#'+f.id,String(card.cvv)); }
         else await fillField('#'+f.id,val);
       }
+      try{
+        const hs2=await page.$$('input,textarea');
+        const filled2=[];
+        for(const h of hs2){
+          try{
+            const info=await h.evaluate(x=>({id:x.id||'',ph:x.placeholder||'',al:(x.getAttribute&&x.getAttribute('aria-label'))||'',type:(x.type||'').toLowerCase(),vis:x.offsetParent!==null,val:x.value||''}));
+            if(!info.vis||info.val||!['text','tel','email','password'].includes(info.type)) continue;
+            const hay=(info.id+' '+info.ph+' '+info.al).toLowerCase();
+            let v=null;
+            if(/card.?num/.test(hay)) v=String(card.number);
+            else if(/cvv|cvn/.test(hay)) v=String(card.cvv);
+            else if(/expir/.test(hay)) v='12/30';
+            else if(/full.?name/.test(hay)) v=buyer.name;
+            else if(/first.?name|given/.test(hay)) v=buyer.given;
+            else if(/last.?name|surname/.test(hay)) v=buyer.surname;
+            else if(/e-?mail/.test(hay)) v=buyer.email;
+            else if(/^password|senha/.test(hay)) v='Ccr'+Math.floor(10000+Math.random()*89999)+'!x';
+            else if(/dob|birth|nascim/.test(hay)) v='01/01/1990';
+            else if(/phone|tel/.test(hay)) v=(buyer.phone||'').replace(/\D/g,'');
+            else if(/city|munic|localidad/.test(hay)) v=buyer.city;
+            else if(/zip|postal/.test(hay)&&!/card/.test(hay)) v=buyer.postal_code;
+            else if(/line2|apt|apart|compl|addl|unit/.test(hay)) v='Apt '+(101+Math.floor(Math.random()*400));
+            else if(/street|address|line1|logradouro|endereco|calle/.test(hay)) v=buyer.address_line1;
+            else continue;
+            await h.click({clickCount:3}).catch(()=>{});
+            await coSleep(80);
+            let v2=''; try{ v2=await h.evaluate(x=>x.value); }catch(_){}
+            if(!v2){ try{ for(const ch of String(v).split('')){ await page.keyboard.press(ch).catch(()=>{}); await coSleep(18); } v2=''; try{ v2=await h.evaluate(x=>x.value); }catch(_){} }catch(_){} }
+            try{ await h.evaluate(x=>x.dispatchEvent(new Event('blur',{bubbles:true}))).catch(()=>{}); }catch(_){}
+            if(v2) filled2.push((info.id||info.ph||'?')+'='+String(v).slice(0,14));
+          }catch(e){}
+        }
+        try{ logLine({ t: nowISO(), type: 'log', msg: 'pass2 campos: '+(filled2.join(', ')||'nenhum') }); }catch(e){}
+      }catch(e){}
       for(const id of ['signupAgreeToTerms','marketingOptIn']){ const el=await page.$('#'+id); if(el){ const ck=await el.evaluate(n=>n.checked); if(!ck) await el.click().catch(()=>{}); } }
       try{ await page.evaluate(()=>{ const rs=Array.from(document.querySelectorAll('input[type=radio]')); const cr=rs.find(r=>/credit/i.test(r.value||r.id||r.name)); if(cr&&!cr.checked) cr.click(); }); }catch(e){}
       await coSleep(800);
