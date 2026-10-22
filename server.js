@@ -228,7 +228,7 @@ async function coChrome(){
   const puppeteer=require('puppeteer-core');
   const bin=ensureChrome();
   if(!bin) throw new Error('navegador em instalacao automatica - aguarde 2 a 5 min e o ciclo retenta');
-  const args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'];
+  const args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu','--lang=pt-BR'];
   const lp=chromeLibPath();
   const env=Object.assign({},process.env,{ LD_LIBRARY_PATH: lp ? (lp+':'+(process.env.LD_LIBRARY_PATH||'')) : (process.env.LD_LIBRARY_PATH||'') });
   try{ _coBrowser=await puppeteer.launch({ executablePath:bin, headless:'shell', args, env }); }
@@ -431,7 +431,8 @@ async function chargeCheckout(card, amount, currency, buyer, descriptor){
     browser=await coChrome();
     page=await browser.newPage();
     await page.setViewport({width:1280,height:1000});
-    await page.setExtraHTTPHeaders({'Accept-Language':'pt-BR'});
+    await page.setExtraHTTPHeaders({'Accept-Language':'pt-BR,pt;q=0.9,en;q=0.6'});
+    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36').catch(()=>{});
     const gql=[];
     page.on('response',async resp=>{ try{ const u=resp.url(); if(u.includes('/graphql')&&gql.length<60){ const t=await resp.text(); gql.push(t.slice(0,350)); } }catch(e){} });
     const fillField=async(sel,val)=>{ const el=await page.$(sel); if(!el) return false; const cur=await el.evaluate(n=>n.value); if(cur) return true; await el.click({clickCount:3}).catch(()=>{}); await coSleep(60); await el.type(String(val),{delay:30}); await el.evaluate(n=>n.dispatchEvent(new Event('blur',{bubbles:true}))).catch(()=>{}); await coSleep(120); return !!(await el.evaluate(n=>n.value)); };
@@ -450,8 +451,8 @@ async function chargeCheckout(card, amount, currency, buyer, descriptor){
         seen.push('gi'+gi+':'+url+'|'+ti);
         await coSleep(3500);
       }
-      try{ emit('log',{msg:'checkout estado: '+seen.join(' ;; ').slice(-600)}); }catch(e){}
-      try{ await page.waitForSelector(CARDSEL,{timeout:40000}); }catch(e){ let ti=''; try{ ti=await page.title(); }catch(_){} return { ok:false, kind:'decline', message:'pagina de pagamento nao carregou: '+page.url().slice(0,70)+' | titulo: '+String(ti).slice(0,50), raw:{order:oid} }; }
+      try{ logLine({t:nowISO(),type:'log',msg:'checkout estado: '+seen.join(' ;; ').slice(-650)}); }catch(e){}
+      try{ await page.waitForSelector(CARDSEL,{timeout:40000}); }catch(e){ let ti='',dbg=''; try{ ti=await page.title(); }catch(_){} try{ dbg=await page.evaluate(()=>{ const els=[...document.querySelectorAll('a,button,input[type=submit],input[type=button]')].filter(x=>x.offsetParent!==null); return els.slice(0,14).map(x=>x.tagName+':'+String(x.textContent||x.value||'').trim().replace(/\s+/g,' ').slice(0,34))).join(' | '); }); }catch(_){} return { ok:false, kind:'decline', message:'nao chegou ao cartao: '+page.url().slice(0,66)+' | titulo: '+String(ti).slice(0,46)+' | cliaveis: '+String(dbg).slice(0,260), raw:{order:oid} }; }
       // selects
       const sels=await page.evaluate(()=>Array.from(document.querySelectorAll('select')).map(x=>({id:x.id,vis:x.offsetParent!==null,v:x.value||''})).filter(x=>x.vis&&!x.v));
       for(const f of sels){ try{ const el=await page.$('#'+f.id); if(!el) continue; const opts=await el.evaluate(x=>Array.from(x.options).map(o=>({v:o.value,l:o.label}))); let p=null;
