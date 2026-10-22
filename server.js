@@ -195,6 +195,10 @@ async function ensureBuyer(page){
         await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&String(x.innerText||x.value||'').trim()); const c=bs.find(b=>/continue|next|sign ?up|create|criar|avancar|próximo|agree|verify|confirm|finish/i.test(String(b.innerText||b.value||'').trim()))||bs[bs.length-1]; if(c){ try{ c.scrollIntoView({block:'center'}); }catch(_){} c.click(); } });
       }catch(_){}
     }
+    try{
+      const fsd=await p2.evaluate(()=>({url:location.href,title:document.title,inp:Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null).map(x=>(x.id||x.name||'')+':'+(x.type||'')).slice(0,12),btn:Array.from(document.querySelectorAll('button,a,[role="button"]')).filter(x=>x.offsetParent!==null&&String(x.innerText||'').trim()).map(x=>String(x.innerText||'').trim().slice(0,24)).slice(0,8),txt:String(document.body.innerText||'').replace(/\s+/g,' ').slice(0,300)}));
+      logLine({t:nowISO(),type:'log',msg:'boot fim | '+fsd.url.slice(0,70)+' | t:'+fsd.title.slice(0,30)+' | campos:'+fsd.inp.join(',').slice(0,240)+' | btns:'+fsd.btn.join(',').slice(0,140)+' | txt:'+fsd.txt.slice(0,260)});
+    }catch(_){}
     ok=false;
     try{
       await p2.goto('https://www.sandbox.paypal.com/us/personal/signin',{waitUntil:'domcontentloaded',timeout:45000});
@@ -205,6 +209,7 @@ async function ensureBuyer(page){
         for(const ch of email.split('')){ await p2.keyboard.press(ch).catch(()=>{}); await coSleep(14); }
         try{ await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&/continue|next|próximo|sign ?in|log ?in|entrar/i.test(String(x.innerText||x.value||'').trim())); if(bs.length) bs[0].click(); }); }catch(_){}
         await coSleep(6000);
+        { const st2=await p2.evaluate(()=>({u:location.href,n:Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null).map(x=>(x.id||x.name||'')+':'+(x.type||'')).slice(0,8),tx:String(document.body.innerText||'').replace(/\s+/g,' ').slice(0,200)})).catch(()=>({u:'?',n:[],tx:''})); try{ logLine({t:nowISO(),type:'log',msg:'login s1 | '+st2.u.slice(0,60)+' | '+st2.n.join(',').slice(0,160)+' | '+st2.tx.slice(0,160)}); }catch(_){} }
         const p1=await p2.$('input[type="password"]');
         if(p1){
           await p1.click({clickCount:3}).catch(()=>{});
@@ -755,6 +760,7 @@ const signupTry=async()=>{
         }
         await fixThree('pos-fill');
         try{ logLine({ t: nowISO(), type: 'log', msg: 'pass2 campos: '+(filled2.join(', ')||'nenhum') }); }catch(e){}
+        try{ const ids=await page.$$eval('input',els=>els.filter(x=>x.offsetParent!==null).map(x=>(x.id||x.name||x.placeholder||'?')+':'+(x.type||'')).slice(0,16)); logLine({ t: nowISO(), type: 'log', msg: 'pass2 inputs visiveis: '+ids.join(', ').slice(0,430) }); }catch(e){}
       }catch(e){}
       for(const id of ['signupAgreeToTerms','marketingOptIn']){ const el=await page.$('#'+id); if(el){ const ck=await el.evaluate(n=>n.checked); if(!ck) await el.click().catch(()=>{}); } }
       try{ await page.evaluate(()=>{ const rs=Array.from(document.querySelectorAll('input[type=radio]')); const cr=rs.find(r=>/credit/i.test(r.value||r.id||r.name)); if(cr&&!cr.checked) cr.click(); }); }catch(e){}
