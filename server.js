@@ -241,6 +241,7 @@ async function coChrome(){
   const bin=ensureChrome();
   if(!bin) throw new Error('navegador em instalacao automatica - aguarde 2 a 5 min e o ciclo retenta');
   const args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu','--lang=pt-BR'];
+  const px=String(process.env.CC_PROXY||''); if(px){ const pp=px.replace(/^https?:\/\//i,''); args.push('--proxy-server='+pp); }
   const lp=chromeLibPath();
   const env=Object.assign({},process.env,{ LD_LIBRARY_PATH: lp ? (lp+':'+(process.env.LD_LIBRARY_PATH||'')) : (process.env.LD_LIBRARY_PATH||'') });
   try{ _coBrowser=await puppeteer.launch({ executablePath:bin, headless:'shell', args, env }); }
@@ -452,6 +453,7 @@ async function chargeCheckout(card, amount, currency, buyer, descriptor){
     const typeHuman=async(sel,val)=>{ try{ const el=await page.$(sel); if(!el) return false; await el.click({clickCount:3}); await coSleep(300); for(const ch of val.split('')){ await page.keyboard.press(ch); await coSleep(90+Math.floor(Math.random()*80)); } await coSleep(250); await el.evaluate(n=>n.dispatchEvent(new Event('blur',{bubbles:true}))).catch(()=>{}); return true; }catch(e){ return false; } };
     try{
       const CARDSEL='#cardNumber,#cc,input[name="cc-num"],input[aria-label*="card number" i],[data-qa="card-number"]';
+      try{ await page.goto('https://www.paypal.com/',{waitUntil:'domcontentloaded',timeout:30000}); await coSleep(4000+Math.floor(Math.random()*4000)); await page.evaluate(()=>window.scrollBy(0,400)).catch(()=>{}); }catch(e){}
       await page.goto(appr.href,{waitUntil:'domcontentloaded',timeout:60000});
       await coSleep(4000);
       const seen=[]; let nav2=false, clickedG=null;
