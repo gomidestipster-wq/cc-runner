@@ -158,7 +158,7 @@ async function ensureBuyer(page){
     let ok=false;
     try{ await p2.goto('https://www.sandbox.paypal.com/signin',{waitUntil:'domcontentloaded',timeout:45000}); }catch(_){} await coSleep(6000);
     try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"],div,span')).filter(e=>e.offsetParent!==null&&/don.?t have an account|create an account|sign ?up|cadastre/i.test(String(e.textContent||'').trim())&&String(e.textContent||'').trim().length<50); if(els.length){ try{ els[els.length-1].click(); }catch(_){} } }); }catch(_){}
-    for(let step=0; step<10; step++){
+    for(let step=0; step<14; step++){
       await coSleep(3500);
       const state=await p2.evaluate(()=>{
         const inp=Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null).map(x=>({id:x.id||'',t:(x.type||'').toLowerCase(),v:x.value||''}));
@@ -169,7 +169,7 @@ async function ensureBuyer(page){
       if(!state){ try{ bl('boot s'+step+' estado nulo - aguardando pagina'); }catch(_){} await coSleep(2000); continue; }
       if(/mobile-app/.test(state.url)){ try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"]')).filter(x=>x.offsetParent!==null&&/continue on web/i.test(String(x.innerText||'').trim())); if(els.length) els[els.length-1].click(); }); }catch(_){} continue; }
       try{ bl('boot s'+step+' | '+state.url.slice(0,64)+' | t:'+state.title.slice(0,26)+' | campos:'+JSON.stringify(state.inp).slice(0,240)+' | btns:'+state.btns.join(',').slice(0,110)); }catch(_){}
-      if(/\/wallet|\/marge|\/home|onboarding|welcome|confirm.*email|check.*email|verifique.*email/i.test(state.url+' '+state.title)){ ok=true; break; }
+      if(/\/wallet|\/marge|onboarding\/(complete|success)|verifique.*email|confirm.*email|check.*email/i.test(state.url+' '+state.title)){ ok=true; break; }
       try{
         await p2.evaluate(({email,pw,first,last})=>{
           const d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
@@ -194,7 +194,7 @@ async function ensureBuyer(page){
         },{email,pw,first,last});
       }catch(_){}
       try{
-        await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&String(x.innerText||x.value||'').trim()); const c=bs.find(b=>/continue|next|sign ?up|create|criar|avancar|próximo|agree|verify|confirm|finish/i.test(String(b.innerText||b.value||'').trim()))||bs[bs.length-1]; if(c){ try{ c.scrollIntoView({block:'center'}); }catch(_){} c.click(); } });
+        await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&String(x.innerText||x.value||'').trim()); const c=bs.find(b=>/continue|next|sign ?up|create|criar|avancar|próximo|agree|verify|confirm|finish|get started|start/i.test(String(b.innerText||b.value||'').trim()))||bs[bs.length-1]; if(c){ try{ c.scrollIntoView({block:'center'}); }catch(_){} c.click(); } });
       }catch(_){}
     }
     try{
