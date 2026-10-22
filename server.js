@@ -338,8 +338,9 @@ function ensureChrome(){
   const _coListDir=()=>{ try{ const out=[]; const stack=[CHROME_DIR]; while(stack.length&&out.length<40){ const d=stack.pop(); for(const e of fs.readdirSync(d,{withFileTypes:true})){ const p=path.join(d,e.name); out.push(p.replace(CHROME_DIR,'.')); if(e.isDirectory()) stack.push(p); } } return out.length?out.join(', '):'<vazia>'; }catch(e){ return '<inlegivel>'; } };
   async function _coFetchInstall(src){
     try{
-      let r,before='';
-      if(typeof src==='string'){ r=await fetch(src,{signal:AbortSignal.timeout(300000)}); before=src; if(!r.ok) throw new Error('http '+r.status+' em '+src); }
+      let r;
+      if(typeof src==='string'){ r=await fetch(src,{signal:AbortSignal.timeout(300000)}); if(!r.ok) throw new Error('http '+r.status+' em '+src); }
+      else { r=src; }
       const buf=Buffer.from(await r.arrayBuffer());
       fs.mkdirSync(CHROME_DIR,{recursive:true});
       fs.writeFileSync(path.join(CHROME_DIR,'dl.zip'),buf);
@@ -361,6 +362,19 @@ function ensureChrome(){
   }
   async function _coDirect(){
     try{
+      try{
+        const zz=path.join(CHROME_DIR,'chrome-headless-shell');
+        const zs=fs.readdirSync(zz).filter(n=>/\.zip$/i.test(n)&&fs.statSync(path.join(zz,n)).size>50e6);
+        if(zs.length){
+          const zpath=path.join(zz,zs[0]);
+          _coLog('reutilizando zip local: '+zs[0]+' ('+Math.round(fs.statSync(zpath).size/1048576)+'MB)');
+          let extOk=false;
+          try{ require('child_process').execSync('unzip -oq '+JSON.stringify(zpath)+' -d '+JSON.stringify(CHROME_DIR),{timeout:300000}); extOk=true; }
+          catch(_){ try{ require('child_process').execSync('python3 -m zipfile -e '+JSON.stringify(zpath)+' '+JSON.stringify(CHROME_DIR),{timeout:300000}); extOk=true; }catch(__){} }
+          if(extOk){ _coLog('zip extraido p/ '+CHROME_DIR); const b2=findChromeBin(); if(b2){ _coLog('OK binario via reuso: '+b2); return b2; } }
+          _coLog('reuso falhou ou binario ausente apos extrair');
+        }
+      }catch(e){ _coLog('reuso-err '+String(e.message).slice(0,120)); }
       const txt=await (await fetch('https://googlechromelabs.github.io/chrome-for-testing/known-good-versions.json',{signal:AbortSignal.timeout(30000)})).text();
       const JJ=JSON.parse(txt); const ks=(JJ.knownGoodVersions||JJ.versions||JJ.data||[]);
       for(const e of ks){ if(e.channel==='Stable'&&Array.isArray((e.downloads||{})['chrome-headless-shell'])){ const dl=(e.downloads['chrome-headless-shell']).find(x=>x.platform==='linux64'); if(dl){ _coLog('download direto: '+dl.url); return await _coFetchInstall(dl.url); } } }
