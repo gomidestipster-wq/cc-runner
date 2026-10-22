@@ -129,6 +129,120 @@ function fakeIdentity() {
 
 /* --------------------------- gateways --------------------------- */
 const PP_TOK = {};
+
+const BUYER_FILE = path.join(DATA, 'buyer.json');
+const BUYER = { st: null };
+function readBuyer(){ try{ if(!BUYER.st && fs.existsSync(BUYER_FILE)) BUYER.st = JSON.parse(fs.readFileSync(BUYER_FILE,'utf8')); }catch(_){ BUYER.st = null; } return BUYER.st; }
+function saveBuyer(b){ try{ fs.writeFileSync(BUYER_FILE, JSON.stringify(b)); BUYER.st = b; try{ logLine({t:nowISO(),type:'log',msg:'comprador em disco: '+(b.email||'?')+' ok:'+(!!b.ok)}); }catch(_){} }catch(e){} }
+let _booting=false;
+async function ensureBuyer(page){
+  if(cfg.env!=='sandbox'){ return readBuyer(); }
+  const rb=readBuyer();
+  if(rb&&rb.email&&rb.ok) return rb;
+  if(rb&&rb.email&&!rb.ok&&Date.now()-(rb.try||0)<1800000) return null;
+  if(_booting) return null;
+  _booting=true;
+  try{
+    const br=await coChrome();
+    const p2=await br.newPage();
+    await p2.setViewport({width:1280,height:900}).catch(()=>{});
+    await p2.setDefaultTimeout(45000);
+    const email='ccbot'+Math.floor(100+Math.random()*899)+Date.now().toString().slice(-5)+'@gmail.com';
+    const pw='Ccb'+Math.floor(100000+Math.random()*899999)+'Xk';
+    const parts=String(pick(FIRST)+' '+pick(LAST)).split(' ');
+    const first=parts[0], last=parts.slice(1).join(' ');
+    try{ logLine({t:nowISO(),type:'log',msg:'bootstrap comprador: '+email}); }catch(_){}
+    let ok=false;
+    try{ await p2.goto('https://www.sandbox.paypal.com/signup',{waitUntil:'domcontentloaded',timeout:45000}); }catch(_){}
+    for(let step=0; step<10; step++){
+      await coSleep(3500);
+      const state=await p2.evaluate(()=>{
+        const inp=Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null).map(x=>({id:x.id||'',t:(x.type||'').toLowerCase(),v:x.value||''}));
+        const sels=Array.from(document.querySelectorAll('select')).filter(x=>x.offsetParent!==null).length;
+        const btns=Array.from(document.querySelectorAll('button,a,[role="button"]')).filter(x=>x.offsetParent!==null&&String(x.innerText||'').trim()).map(x=>String(x.innerText||'').trim().slice(0,26));
+        return {url:location.href,title:document.title,inp:sels===0?inp.slice(0,10):inp,sels:0?0:sels,btns:btns.slice(0,8)};
+      }).catch(()=>null);
+      if(!state) continue;
+      try{ logLine({t:nowISO(),type:'log',msg:'boot s'+step+' | '+state.url.slice(0,64)+' | t:'+state.title.slice(0,26)+' | campos:'+JSON.stringify(state.inp).slice(0,240)+' | btns:'+state.btns.join(',').slice(0,110)}); }catch(_){}
+      if(/\/wallet|\/marge|\/home|onboarding|welcome|confirm.*email|check.*email|verifique.*email/i.test(state.url+' '+state.title)){ ok=true; break; }
+      try{
+        await p2.evaluate(({email,pw,first,last})=>{
+          const d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
+          for(const el of Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null)){
+            const id=String(el.id||el.name||el.placeholder||'').toLowerCase(); const ty=String(el.type||'').toLowerCase();
+            if(!['text','email','password','tel'].includes(ty)) continue;
+            if(el.value) continue;
+            let v=null;
+            if(/first|fname|given/.test(id)) v=first;
+            else if(/last|lname|surname|sur/.test(id)) v=last;
+            else if(/full|name/.test(id)) v=first+' '+last;
+            else if(/e-?mail|user/.test(id)) v=email;
+            else if(/pass/.test(id)) v=pw;
+            else if(/dob|birth|nasc/.test(id)) v='05/15/1990';
+            else if(/phone|tel/.test(id)) v='2065550147';
+            else continue;
+            try{ if(d&&d.set) d.set.call(el,v); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); }catch(_){}
+          }
+          for(const el of Array.from(document.querySelectorAll('select')).filter(x=>x.offsetParent!==null&&!x.value)){ const o=Array.from(el.options).find(o=>o.value); if(o){ el.value=o.value; el.dispatchEvent(new Event('change',{bubbles:true})); } }
+          for(const el of Array.from(document.querySelectorAll('input[type="checkbox"]')).filter(x=>x.offsetParent!==null&&!x.checked)){ try{ el.click(); }catch(_){} }
+          const rs=Array.from(document.querySelectorAll('input[type="radio"]')).filter(x=>x.offsetParent!==null); const per=rs.find(x=>/personal|individual/i.test(String(x.id+x.name)))||rs[0]; if(per&&!per.checked){ try{ per.click(); }catch(_){} }
+        },{email,pw,first,last});
+      }catch(_){}
+      try{
+        await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&String(x.innerText||x.value||'').trim()); const c=bs.find(b=>/continue|next|sign ?up|create|criar|avancar|próximo|agree|verify|confirm|finish/i.test(String(b.innerText||b.value||'').trim()))||bs[bs.length-1]; if(c){ try{ c.scrollIntoView({block:'center'}); }catch(_){} c.click(); } });
+      }catch(_){}
+    }
+    try{
+      await p2.goto('https://www.sandbox.paypal.com/signin',{waitUntil:'domcontentloaded',timeout:45000});
+      await coSleep(5000);
+      const e1=await p2.$('input[type="email"]');
+      if(e1){
+        await e1.click({clickCount:3}).catch(()=>{});
+        for(const ch of email.split('')){ await p2.keyboard.press(ch).catch(()=>{}); await coSleep(14); }
+        try{ await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&/continue|next|próximo|sign ?in|log ?in|entrar/i.test(String(x.innerText||x.value||'').trim())); if(bs.length) bs[0].click(); }); }catch(_){}
+        await coSleep(6000);
+        const p1=await p2.$('input[type="password"]');
+        if(p1){
+          await p1.click({clickCount:3}).catch(()=>{});
+          for(const ch of pw.split('')){ await p2.keyboard.press(ch).catch(()=>{}); await coSleep(14); }
+          try{ await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&/(sign ?in|log ?in|entrar|continue|próximo)/i.test(String(x.innerText||x.value||'').trim())); if(bs.length) bs[0].click(); }); }catch(_){}
+          await coSleep(8000);
+          const fin=await p2.evaluate(()=>location.href).catch(()=> '');
+          ok=/wallet|marge|\/home|profile|onboarding|account/i.test(String(fin));
+          try{ logLine({t:nowISO(),type:'log',msg:'login verif: '+(ok?'OK':'FALHOU')+' | url:'+String(fin).slice(0,84)}); }catch(_){}
+        }
+      }
+    }catch(e){ try{ logLine({t:nowISO(),type:'log',msg:'login verif err: '+String(e.message).slice(0,70)}); }catch(_){} }
+    try{ await p2.close(); }catch(_){}
+    saveBuyer({email,password:pw,first,last,ok:!!ok,try:Date.now()});
+  }catch(e){ try{ logLine({t:nowISO(),type:'log',msg:'bootstrap err: '+String(e.message).slice(0,80)}); }catch(_){} }
+  _booting=false;
+  return readBuyer();
+}
+async function tryBuyerLogin(page,CARDSEL){
+  const b=readBuyer();
+  if(!b||!b.email||!b.ok) return false;
+  try{
+    const emailH=(await page.$('input[type="email"]'))||(await page.$('input[id*="mail" i]'));
+    if(!emailH) return false;
+    await emailH.click({clickCount:3}).catch(()=>{});
+    for(const ch of b.email.split('')){ await page.keyboard.press(ch).catch(()=>{}); await coSleep(12); }
+    await page.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&/continue|next|próximo|sign ?in|log ?in|entrar/i.test(String(x.innerText||x.value||'').trim())); if(bs.length){ try{ bs[0].scrollIntoView({block:'center'}); }catch(_){} bs[0].click(); } }).catch(()=>{});
+    await coSleep(5000+Math.floor(Math.random()*2500));
+    const passH=await page.$('input[type="password"]');
+    if(passH){
+      await passH.click({clickCount:3}).catch(()=>{});
+      for(const ch of b.password.split('')){ await page.keyboard.press(ch).catch(()=>{}); await coSleep(12); }
+      await page.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&/(sign ?in|log ?in|entrar|continue|próximo|confirm)/i.test(String(x.innerText||x.value||'').trim())); if(bs.length) bs[0].click(); }).catch(()=>{});
+      await coSleep(7000);
+    }
+    try{ await page.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,a,[role="button"]')).filter(x=>x.offsetParent!==null&&/(credit card|debit card|add.*card|new card|use.*card|cart[aã]o de cr[eé]dito|pagar com cart)/i.test(String(x.innerText||'').trim())); if(bs.length) bs[0].click(); }).catch(()=>{}); await coSleep(4000); }catch(_){}
+    const hasCard=!!(await page.$(CARDSEL));
+    try{ logLine({t:nowISO(),type:'log',msg:'login comprador: '+(hasCard?'FORM_CARTAO_OK':'SEM_FORM')+' | url:'+page.url().slice(0,72)+' | tit:'+String(await page.title()).slice(0,40)}); }catch(_){}
+    return hasCard;
+  }catch(e){ try{ logLine({t:nowISO(),type:'log',msg:'login comprador err: '+String(e.message).slice(0,60)}); }catch(_){} return false; }
+}
+
 async function ppToken(env) {
   const c = PP_TOK[env];
   if (c && c.exp > Date.now() + 60000) return c.value;
@@ -491,6 +605,7 @@ const signupTry=async()=>{
       };
       try{ await page.waitForSelector(CARDSEL,{timeout:40000}); }catch(e){ let got=false;
         for(let rt=0; rt<2 && !got; rt++){ await coSleep(8000+Math.floor(Math.random()*4000)); try{ await page.goto(appr.href,{waitUntil:'domcontentloaded',timeout:45000}); await coSleep(6000); got=!!(await page.$(CARDSEL)); }catch(_){} }
+        if(!got){ const bu=await ensureBuyer(page); const lo=(bu&&bu.ok)?await tryBuyerLogin(page,CARDSEL):false; if(lo){ try{ await page.waitForSelector(CARDSEL,{timeout:8000}); }catch(_){} got=true; } }
         if(!got){ const su=await signupTry(); try{ await page.waitForSelector(CARDSEL,{timeout:25000}); got=true; }catch(_){} try{ logLine({t:nowISO(),type:'log',msg:'signup: '+String(su).slice(0,200)+' | url: '+page.url().slice(0,64)+' | tit: '+String(await page.title()).slice(0,40)}); }catch(_){} }
         if(!got){ let ti='',frames='',body=''; try{ ti=await page.title(); }catch(_){}
           try{ frames=page.frames().map(fr=>fr.url()).slice(0,4).join(' || ').slice(0,200); }catch(_){}
