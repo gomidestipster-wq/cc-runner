@@ -258,6 +258,7 @@ function findChromeBin(){
   return null;
 }
 let _coInstalling=false;
+let _coNext=0;
 function maybeUnpackChrome(){
   try{
     const dir=CHROME_DIR;
@@ -307,19 +308,21 @@ function ensureChrome(){
   let b=findChromeBin();
   if(!b) b=maybeUnpackChrome();
   if(b) return b;
-  if(!_coInstalling){
+  let _coLog=m=>{try{fs.appendFileSync(LOG_FILE,JSON.stringify({t:new Date().toISOString(),type:'log',msg:'[chrome-dl] '+String(m).replace(/\s+/g,' ').slice(-260)})+'\n');}catch(_){}};
+  if(!_coInstalling && Date.now()>=(_coNext||0)){
     _coInstalling=true;
-    console.log('[chrome-dl] navegador ausente - baixando via npx (sem sudo, ~130MB)...');
+    _coLog('iniciando download do navegador (~130MB)...');
     emit('log',{msg:'baixando navegador automaticamente (~2-5 min)...'});
     try{ fs.mkdirSync(CHROME_DIR,{recursive:true}); }catch(e){}
     try{
       const cli=require.resolve('@puppeteer/browsers/lib/cjs/main-cli.js');
+      let tail='';
       const p=require('child_process').spawn(process.execPath,[cli,'install','chrome-headless-shell@stable','--path',CHROME_DIR],{stdio:['ignore','pipe','pipe']});
-      p.stdout.on('data',d=>console.log('[chrome-dl]',String(d).trim().slice(0,140)));
-      p.stderr.on('data',d=>console.log('[chrome-dl]',String(d).trim().slice(0,140)));
-      p.on('error',e=>console.log('[chrome-dl] erro spawn:',e.message));
-      p.on('close',c=>{ console.log('[chrome-dl] exit',c); if(c!==0)_coInstalling=false; emit('log',{msg:c===0?'navegador baixado com sucesso':'falha ao baixar navegador (ver logs)'}); });
-    }catch(e){ console.log('[chrome-dl] erro:',e.message); }
+      p.stdout.on('data',d=>{tail=tail+String(d).slice(-400); console.log('[chrome-dl]',String(d).trim().slice(0,140));});
+      p.stderr.on('data',d=>{tail=tail+String(d).slice(-400); console.log('[chrome-dl]',String(d).trim().slice(0,140));});
+      p.on('error',e=>{console.log('[chrome-dl] erro spawn:',e.message); _coLog('ERRO SPAWN: '+e.message+' | fim: '+tail.slice(-200)); _coInstalling=false; _coNext=Date.now()+90000;});
+      p.on('close',c=>{ console.log('[chrome-dl] exit',c); if(c!==0){_coLog('EXIT '+c+' | fim: '+tail.slice(-260)); _coInstalling=false; _coNext=Date.now()+90000;} else { _coLog('download concluido - procurando binario...'); } emit('log',{msg:c===0?'navegador baixado com sucesso':'falha ao baixar navegador (detalhe nos resultados)'}); });
+    }catch(e){ console.log('[chrome-dl] erro:',e.message); _coLog('ERRO CLI/REQUIRE: '+e.message); _coInstalling=false; _coNext=Date.now()+90000; }
   }
   return null;
 }
