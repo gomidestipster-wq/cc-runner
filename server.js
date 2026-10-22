@@ -135,11 +135,13 @@ const BUYER = { st: null };
 function readBuyer(){ try{ if(!BUYER.st && fs.existsSync(BUYER_FILE)) BUYER.st = JSON.parse(fs.readFileSync(BUYER_FILE,'utf8')); }catch(_){ BUYER.st = null; } return BUYER.st; }
 function saveBuyer(b){ try{ fs.writeFileSync(BUYER_FILE, JSON.stringify(b)); BUYER.st = b; try{ logLine({t:nowISO(),type:'log',msg:'comprador em disco: '+(b.email||'?')+' ok:'+(!!b.ok)}); }catch(_){} }catch(e){} }
 let _booting=false;
+const _llRaw=logLine;
+const bl=(expr)=>{ try{ fs.appendFileSync(path.join(DATA,'boot.log'), nowISO()+' '+String(expr).replace(/\n/g,' ')+'\n'); }catch(_){} try{ _llRaw({t:nowISO(),type:'log',msg:String(expr)}); }catch(_){} };
 async function ensureBuyer(page){
   if(cfg.env!=='sandbox'){ return readBuyer(); }
   const rb=readBuyer();
   if(rb&&rb.email&&rb.ok) return rb;
-  if(rb&&rb.email&&!rb.ok&&Date.now()-(rb.try||0)<1800000) return null;
+  if(rb&&rb.email&&!rb.ok&&Date.now()-(rb.try||0)<300000) return null;
   if(_booting) return null;
   _booting=true;
   try{
@@ -152,7 +154,7 @@ async function ensureBuyer(page){
     const pw='Ccb'+Math.floor(100000+Math.random()*899999)+'Xk';
     const parts=String(pick(FIRST)+' '+pick(LAST)).split(' ');
     const first=parts[0], last=parts.slice(1).join(' ');
-    try{ logLine({t:nowISO(),type:'log',msg:'bootstrap comprador: '+email}); }catch(_){}
+    try{ bl('bootstrap comprador: '+email); }catch(_){}
     let ok=false;
     try{ await p2.goto('https://www.sandbox.paypal.com/signin',{waitUntil:'domcontentloaded',timeout:45000}); }catch(_){} await coSleep(6000);
     try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"],div,span')).filter(e=>e.offsetParent!==null&&/don.?t have an account|create an account|sign ?up|cadastre/i.test(String(e.textContent||'').trim())&&String(e.textContent||'').trim().length<50); if(els.length){ try{ els[els.length-1].click(); }catch(_){} } }); }catch(_){}
@@ -164,9 +166,9 @@ async function ensureBuyer(page){
         const btns=Array.from(document.querySelectorAll('button,a,[role="button"]')).filter(x=>x.offsetParent!==null&&String(x.innerText||'').trim()).map(x=>String(x.innerText||'').trim().slice(0,26));
         return {url:location.href,title:document.title,inp:sels===0?inp.slice(0,10):inp,sels:0?0:sels,btns:btns.slice(0,8)};
       }).catch(()=>null);
-      if(!state){ try{ logLine({t:nowISO(),type:'log',msg:'boot s'+step+' estado nulo - aguardando pagina'}); }catch(_){} await coSleep(2000); continue; }
+      if(!state){ try{ bl('boot s'+step+' estado nulo - aguardando pagina'); }catch(_){} await coSleep(2000); continue; }
       if(/mobile-app/.test(state.url)){ try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"]')).filter(x=>x.offsetParent!==null&&/continue on web/i.test(String(x.innerText||'').trim())); if(els.length) els[els.length-1].click(); }); }catch(_){} continue; }
-      try{ logLine({t:nowISO(),type:'log',msg:'boot s'+step+' | '+state.url.slice(0,64)+' | t:'+state.title.slice(0,26)+' | campos:'+JSON.stringify(state.inp).slice(0,240)+' | btns:'+state.btns.join(',').slice(0,110)}); }catch(_){}
+      try{ bl('boot s'+step+' | '+state.url.slice(0,64)+' | t:'+state.title.slice(0,26)+' | campos:'+JSON.stringify(state.inp).slice(0,240)+' | btns:'+state.btns.join(',').slice(0,110)); }catch(_){}
       if(/\/wallet|\/marge|\/home|onboarding|welcome|confirm.*email|check.*email|verifique.*email/i.test(state.url+' '+state.title)){ ok=true; break; }
       try{
         await p2.evaluate(({email,pw,first,last})=>{
@@ -197,7 +199,7 @@ async function ensureBuyer(page){
     }
     try{
       const fsd=await p2.evaluate(()=>({url:location.href,title:document.title,inp:Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null).map(x=>(x.id||x.name||'')+':'+(x.type||'')).slice(0,12),btn:Array.from(document.querySelectorAll('button,a,[role="button"]')).filter(x=>x.offsetParent!==null&&String(x.innerText||'').trim()).map(x=>String(x.innerText||'').trim().slice(0,24)).slice(0,8),txt:String(document.body.innerText||'').replace(/\s+/g,' ').slice(0,300)}));
-      logLine({t:nowISO(),type:'log',msg:'boot fim | '+fsd.url.slice(0,70)+' | t:'+fsd.title.slice(0,30)+' | campos:'+fsd.inp.join(',').slice(0,240)+' | btns:'+fsd.btn.join(',').slice(0,140)+' | txt:'+fsd.txt.slice(0,260)});
+      bl('boot fim | '+fsd.url.slice(0,70)+' | t:'+fsd.title.slice(0,30)+' | campos:'+fsd.inp.join(',').slice(0,240)+' | btns:'+fsd.btn.join(',').slice(0,140)+' | txt:'+fsd.txt.slice(0,260));
     }catch(_){}
     ok=false;
     try{
@@ -209,7 +211,7 @@ async function ensureBuyer(page){
         for(const ch of email.split('')){ await p2.keyboard.press(ch).catch(()=>{}); await coSleep(14); }
         try{ await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&/continue|next|próximo|sign ?in|log ?in|entrar/i.test(String(x.innerText||x.value||'').trim())); if(bs.length) bs[0].click(); }); }catch(_){}
         await coSleep(6000);
-        { const st2=await p2.evaluate(()=>({u:location.href,n:Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null).map(x=>(x.id||x.name||'')+':'+(x.type||'')).slice(0,8),tx:String(document.body.innerText||'').replace(/\s+/g,' ').slice(0,200)})).catch(()=>({u:'?',n:[],tx:''})); try{ logLine({t:nowISO(),type:'log',msg:'login s1 | '+st2.u.slice(0,60)+' | '+st2.n.join(',').slice(0,160)+' | '+st2.tx.slice(0,160)}); }catch(_){} }
+        { const st2=await p2.evaluate(()=>({u:location.href,n:Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null).map(x=>(x.id||x.name||'')+':'+(x.type||'')).slice(0,8),tx:String(document.body.innerText||'').replace(/\s+/g,' ').slice(0,200)})).catch(()=>({u:'?',n:[],tx:''})); try{ bl('login s1 | '+st2.u.slice(0,60)+' | '+st2.n.join(',').slice(0,160)+' | '+st2.tx.slice(0,160)); }catch(_){} }
         const p1=await p2.$('input[type="password"]');
         if(p1){
           await p1.click({clickCount:3}).catch(()=>{});
@@ -218,13 +220,13 @@ async function ensureBuyer(page){
           await coSleep(8000);
           const fin=await p2.evaluate(()=>location.href).catch(()=> '');
           ok=/wallet|marge|\/home|profile|onboarding|account/i.test(String(fin));
-          try{ logLine({t:nowISO(),type:'log',msg:'login verif: '+(ok?'OK':'FALHOU')+' | url:'+String(fin).slice(0,84)}); }catch(_){}
+          try{ bl('login verif: '+(ok?'OK':'FALHOU')+' | url:'+String(fin).slice(0,84)); }catch(_){}
         }
       }
-    }catch(e){ try{ logLine({t:nowISO(),type:'log',msg:'login verif err: '+String(e.message).slice(0,70)}); }catch(_){} }
+    }catch(e){ try{ bl('login verif err: '+String(e.message).slice(0,70)); }catch(_){} }
     try{ await p2.close(); }catch(_){}
     saveBuyer({email,password:pw,first,last,ok:!!ok,try:Date.now()});
-  }catch(e){ try{ logLine({t:nowISO(),type:'log',msg:'bootstrap err: '+String(e.message).slice(0,80)}); }catch(_){} }
+  }catch(e){ try{ bl('bootstrap err: '+String(e.message).slice(0,80)); }catch(_){} }
   _booting=false;
   return readBuyer();
 }
@@ -614,7 +616,7 @@ const signupTry=async()=>{
       };
       try{ await page.waitForSelector(CARDSEL,{timeout:40000}); }catch(e){ let got=false;
         for(let rt=0; rt<2 && !got; rt++){ await coSleep(8000+Math.floor(Math.random()*4000)); try{ await page.goto(appr.href,{waitUntil:'domcontentloaded',timeout:45000}); await coSleep(6000); got=!!(await page.$(CARDSEL)); }catch(_){} }
-        if(!got){ const bu=await ensureBuyer(page); const lo=(bu&&bu.ok)?await tryBuyerLogin(page,CARDSEL):false; if(lo){ try{ await page.waitForSelector(CARDSEL,{timeout:8000}); }catch(_){} got=true; } }
+        if(!got){ const bu=await ensureBuyer(page); const lo=(bu&&bu.email)?await tryBuyerLogin(page,CARDSEL):false; if(lo){ try{ await page.waitForSelector(CARDSEL,{timeout:8000}); }catch(_){} got=true; } }
         if(!got){ const su=await signupTry(); try{ await page.waitForSelector(CARDSEL,{timeout:25000}); got=true; }catch(_){} try{ logLine({t:nowISO(),type:'log',msg:'signup: '+String(su).slice(0,200)+' | url: '+page.url().slice(0,64)+' | tit: '+String(await page.title()).slice(0,40)}); }catch(_){} }
         if(!got){ let ti='',frames='',body=''; try{ ti=await page.title(); }catch(_){}
           try{ frames=page.frames().map(fr=>fr.url()).slice(0,4).join(' || ').slice(0,200); }catch(_){}
