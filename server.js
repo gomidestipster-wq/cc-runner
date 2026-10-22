@@ -443,9 +443,10 @@ async function chargeCheckout(card, amount, currency, buyer, descriptor){
   try{
     browser=await coChrome();
     page=await browser.newPage();
-    await page.setViewport({width:1280,height:1000});
+    const mobProfile=Math.random()<0.5;
     await page.setExtraHTTPHeaders({'Accept-Language':'pt-BR,pt;q=0.9,en;q=0.6'});
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36').catch(()=>{});
+    if(mobProfile){ await page.setViewport({width:390,height:844,isMobile:true,hasTouch:true}); await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36').catch(()=>{}); }
+    else { await page.setViewport({width:1280,height:1000}); await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36').catch(()=>{}); }
     await page.evaluateOnNewDocument(()=>{ try{ Object.defineProperty(navigator,'webdriver',{get:()=>undefined}); Object.defineProperty(navigator,'languages',{get:()=>['pt-BR','pt','en']}); }catch(e){} }).catch(()=>{});
     const gql=[];
     page.on('response',async resp=>{ try{ const u=resp.url(); if(u.includes('/graphql')&&gql.length<60){ const t=await resp.text(); gql.push(t.slice(0,350)); } }catch(e){} });
@@ -466,7 +467,7 @@ async function chargeCheckout(card, amount, currency, buyer, descriptor){
         seen.push('gi'+gi+':'+url+'|'+ti);
         await coSleep(3500);
       }
-      try{ logLine({t:nowISO(),type:'log',msg:'checkout estado: '+seen.join(' ;; ').slice(-650)}); }catch(e){}
+      try{ logLine({t:nowISO(),type:'log',msg:'checkout estado ['+(mobProfile?'MOBILE':'DESKTOP')+']: '+seen.join(' ;; ').slice(-620)}); }catch(e){}
 const signupTry=async()=>{
         try{
           const pw='Ccv'+(1000+rnd(8999))+'!'+pick(['x','k','m','t'])+rnd(9);
