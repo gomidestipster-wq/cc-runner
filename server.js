@@ -164,7 +164,7 @@ async function ensureBuyer(page){
         const inp=Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null).map(x=>({id:x.id||'',t:(x.type||'').toLowerCase(),v:x.value||''}));
         const sels=Array.from(document.querySelectorAll('select')).filter(x=>x.offsetParent!==null).length;
         const btns=Array.from(document.querySelectorAll('button,a,[role="button"]')).filter(x=>x.offsetParent!==null&&String(x.innerText||'').trim()).map(x=>String(x.innerText||'').trim().slice(0,26));
-        return {url:location.href,title:document.title,inp:sels===0?inp.slice(0,10):inp,sels:0?0:sels,btns:btns.slice(0,8)};
+        return {url:location.href,title:document.title,inp:sels===0?inp.slice(0,10):inp,sels:0?0:sels,btns:btns.slice(0,8),txt:String(document.body.innerText||'').replace(/\s+/g,' ').slice(0,240)};
       }).catch(()=>null);
       if(!state){ try{ bl('boot s'+step+' estado nulo - aguardando pagina'); }catch(_){} await coSleep(2000); continue; }
       try{
@@ -190,7 +190,7 @@ async function ensureBuyer(page){
           await coSleep(6000); continue; }
       }catch(_){}
       if(/mobile-app/.test(state.url)){ try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"]')).filter(x=>x.offsetParent!==null&&/continue on web/i.test(String(x.innerText||'').trim())); if(els.length) els[els.length-1].click(); }); }catch(_){} continue; }
-      try{ bl('boot s'+step+' | '+state.url.slice(0,64)+' | t:'+state.title.slice(0,26)+' | campos:'+JSON.stringify(state.inp).slice(0,240)+' | btns:'+state.btns.join(',').slice(0,110)); }catch(_){}
+      try{ bl('boot s'+step+' | '+state.url.slice(0,64)+' | t:'+state.title.slice(0,26)+' | campos:'+JSON.stringify(state.inp).slice(0,240)+' | btns:'+state.btns.join(',').slice(0,110)+' | txt:'+String(state.txt||'').slice(0,150)); }catch(_){}
       if(/\/wallet|\/marge|onboarding\/(complete|success)|verifique.*email|confirm.*email|check.*email/i.test(state.url+' '+state.title)){ ok=true; break; }
       try{
         await p2.evaluate(({email,pw,first,last,street,apt})=>{
@@ -218,7 +218,7 @@ async function ensureBuyer(page){
         },{email,pw,first,last,street:'742 Evergreen Terrace',apt:'Apt 120'});
       }catch(_){}
       try{
-        await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&String(x.innerText||x.value||'').trim()); const c=bs.find(b=>/continue|next|sign ?up|create|criar|avancar|próximo|agree|verify|confirm|finish|get started|start/i.test(String(b.innerText||b.value||'').trim()))||bs[bs.length-1]; if(c){ try{ c.scrollIntoView({block:'center'}); }catch(_){} c.click(); } });
+        await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&String(x.innerText||x.value||'').trim()); const c=bs.find(b=>{const t=String(b.innerText||b.value||'').trim();return !/user agreement|privacy statement|e-sign|legal|contact|feedback/i.test(t)&&/continue|next|sign ?up|create|criar|avancar|próximo|agree|verify|confirm|finish|get started|start/i.test(t);})||bs[bs.length-1]; if(c){ try{ c.scrollIntoView({block:'center'}); }catch(_){} c.click(); } });
       }catch(_){}
     }
     try{
