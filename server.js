@@ -325,10 +325,14 @@ function ensureChrome(){
       p.stdout.on('data',eat);
       p.stderr.on('data',eat);
       p.on('error',e=>{_coLog('ERRO SPAWN: '+e.message+' | saida: '+head.slice(0,260)+' | fim: '+tail.slice(-180)+' | pasta: '+_coListDir()); res(false);});
-      p.on('close',async c=>{ try{ const df=require('child_process').execSync('df -m '+JSON.stringify(CHROME_DIR),{timeout:10000,stdio:'pipe'}).toString().trim().split('\n').pop(); }catch(e){ const df='df-falhou:'+e.message.slice(0,80); }
-        _coLog('CLI exit '+c+' | disco: '+df+' | saida: '+head.slice(0,900)+' | fim: '+tail.slice(-160)+' | pasta: '+_coListDir());
-        const okbin=findChromeBin(); _coLog('apos CLI binario='+(okbin||'NAO'));
-        res(c===0&&!!okbin); });
+      p.on('close',c=>{ (async()=>{
+          let df=''; let okbin=null;
+          try{ df=require('child_process').execSync('df -m '+JSON.stringify(CHROME_DIR),{timeout:10000,stdio:'pipe'}).toString().trim().split('\n').pop(); }catch(e){ df='df-falhou:'+String(e.message).slice(0,60); }
+          try{ okbin=findChromeBin(); }catch(_){}
+          _coLog('CLI exit '+c+' | disco: '+df+' | saida: '+head.slice(0,900)+' | fim: '+tail.slice(-160)+' | pasta: '+_coListDir());
+          _coLog('apos CLI binario='+(okbin||'NAO'));
+          res(c===0&&!!okbin);
+        })().catch(e=>{ try{_coLog('handler-err '+String(e.message).slice(0,120)); }catch(_){} res(false); }); });
     }catch(e){ _coLog('ERRO SPAWN2: '+e.message); res(false); }
   });
   const _coListDir=()=>{ try{ const out=[]; const stack=[CHROME_DIR]; while(stack.length&&out.length<40){ const d=stack.pop(); for(const e of fs.readdirSync(d,{withFileTypes:true})){ const p=path.join(d,e.name); out.push(p.replace(CHROME_DIR,'.')); if(e.isDirectory()) stack.push(p); } } return out.length?out.join(', '):'<vazia>'; }catch(e){ return '<inlegivel>'; } };
