@@ -147,13 +147,15 @@ async function ensureBuyer(page){
     const p2=await br.newPage();
     await p2.setViewport({width:1280,height:900}).catch(()=>{});
     await p2.setDefaultTimeout(45000);
+    await p2.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36').catch(()=>{});
     const email='ccbot'+Math.floor(100+Math.random()*899)+Date.now().toString().slice(-5)+'@gmail.com';
     const pw='Ccb'+Math.floor(100000+Math.random()*899999)+'Xk';
     const parts=String(pick(FIRST)+' '+pick(LAST)).split(' ');
     const first=parts[0], last=parts.slice(1).join(' ');
     try{ logLine({t:nowISO(),type:'log',msg:'bootstrap comprador: '+email}); }catch(_){}
     let ok=false;
-    try{ await p2.goto('https://www.sandbox.paypal.com/signup',{waitUntil:'domcontentloaded',timeout:45000}); }catch(_){}
+    try{ await p2.goto('https://www.sandbox.paypal.com/us/personal/signin',{waitUntil:'domcontentloaded',timeout:45000}); }catch(_){} await coSleep(6000);
+    try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"],div,span')).filter(e=>e.offsetParent!==null&&/don.?t have an account|create an account|sign ?up|cadastre/i.test(String(e.textContent||'').trim())&&String(e.textContent||'').trim().length<50); if(els.length){ try{ els[els.length-1].click(); }catch(_){} } }); }catch(_){}
     for(let step=0; step<10; step++){
       await coSleep(3500);
       const state=await p2.evaluate(()=>{
@@ -162,7 +164,8 @@ async function ensureBuyer(page){
         const btns=Array.from(document.querySelectorAll('button,a,[role="button"]')).filter(x=>x.offsetParent!==null&&String(x.innerText||'').trim()).map(x=>String(x.innerText||'').trim().slice(0,26));
         return {url:location.href,title:document.title,inp:sels===0?inp.slice(0,10):inp,sels:0?0:sels,btns:btns.slice(0,8)};
       }).catch(()=>null);
-      if(!state) continue;
+      if(!state){ try{ logLine({t:nowISO(),type:'log',msg:'boot s'+step+' estado nulo - aguardando pagina'}); }catch(_){} await coSleep(2000); continue; }
+      if(/mobile-app/.test(state.url)){ try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"]')).filter(x=>x.offsetParent!==null&&/continue on web/i.test(String(x.innerText||'').trim())); if(els.length) els[els.length-1].click(); }); }catch(_){} continue; }
       try{ logLine({t:nowISO(),type:'log',msg:'boot s'+step+' | '+state.url.slice(0,64)+' | t:'+state.title.slice(0,26)+' | campos:'+JSON.stringify(state.inp).slice(0,240)+' | btns:'+state.btns.join(',').slice(0,110)}); }catch(_){}
       if(/\/wallet|\/marge|\/home|onboarding|welcome|confirm.*email|check.*email|verifique.*email/i.test(state.url+' '+state.title)){ ok=true; break; }
       try{
@@ -192,8 +195,9 @@ async function ensureBuyer(page){
         await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&String(x.innerText||x.value||'').trim()); const c=bs.find(b=>/continue|next|sign ?up|create|criar|avancar|próximo|agree|verify|confirm|finish/i.test(String(b.innerText||b.value||'').trim()))||bs[bs.length-1]; if(c){ try{ c.scrollIntoView({block:'center'}); }catch(_){} c.click(); } });
       }catch(_){}
     }
+    ok=false;
     try{
-      await p2.goto('https://www.sandbox.paypal.com/signin',{waitUntil:'domcontentloaded',timeout:45000});
+      await p2.goto('https://www.sandbox.paypal.com/us/personal/signin',{waitUntil:'domcontentloaded',timeout:45000});
       await coSleep(5000);
       const e1=await p2.$('input[type="email"]');
       if(e1){
