@@ -1,3 +1,4 @@
+try{ require('dns').setResultOrder('ipv4first'); }catch(_){}
 // ============================================================================
 //  CC RUNNER — gerador + checker + drenador de cartões
 //  Back-end único, ZERO dependências. Requer Node 18 ou mais novo.
@@ -228,8 +229,10 @@ async function coChrome(){
   const bin=ensureChrome();
   if(!bin) throw new Error('navegador em instalacao automatica - aguarde 2 a 5 min e o ciclo retenta');
   const args=['--no-sandbox','--disable-dev-shm-usage','--disable-gpu'];
-  try{ _coBrowser=await puppeteer.launch({ executablePath:bin, headless:'shell', args }); }
-  catch(e){ _coBrowser=await puppeteer.launch({ executablePath:bin, headless:true, args }); }
+  const lp=chromeLibPath();
+  const env=Object.assign({},process.env,{ LD_LIBRARY_PATH: lp ? (lp+':'+(process.env.LD_LIBRARY_PATH||'')) : (process.env.LD_LIBRARY_PATH||'') });
+  try{ _coBrowser=await puppeteer.launch({ executablePath:bin, headless:'shell', args, env }); }
+  catch(e){ _coBrowser=await puppeteer.launch({ executablePath:bin, headless:true, args, env }); }
   _coBrowser.on('disconnected',()=>{ _coBrowser=null; });
   return _coBrowser;
 }
@@ -255,8 +258,55 @@ function findChromeBin(){
   return null;
 }
 let _coInstalling=false;
+function maybeUnpackChrome(){
+  try{
+    const dir=CHROME_DIR;
+    if(findChromeBin()) return findChromeBin();
+    let parts=[];
+    try{
+      parts=fs.readdirSync(ROOT).filter(f=>/^chrome\.tgz\.part\d+$/.test(f)).sort((a,b)=>parseInt(a.slice(-1))-parseInt(b.slice(-1))).map(f=>path.join(ROOT,f));
+      // ordem segura por numero completo:
+      parts.sort((a,b)=>parseInt(a.match(/part(\d+)$/)[1])-parseInt(b.match(/part(\d+)$/)[1]));
+    }catch(_){}
+    const single=path.join(ROOT,'chrome.tgz');
+    const useParts=parts.length>=2;
+    if(!(useParts||fs.existsSync(single))) return findChromeBin();
+    console.log('[chrome-unpack] extraindo navegador local...');
+    emit('log',{msg:'extraindo navegador local (segundos)...'});
+    fs.mkdirSync(dir,{recursive:true});
+    const cmd=useParts?('cat '+parts.map(p=>JSON.stringify(p)).join(' ')+' | tar -xzf - -C '+JSON.stringify(dir))
+                       :('tar -xzf '+JSON.stringify(single)+' -C '+JSON.stringify(dir));
+    require('child_process').execSync(cmd,{timeout:600000,stdio:'ignore'});
+    console.log('[chrome-unpack] binario extraido');
+  }catch(e){ console.log('[chrome-unpack] erro:',e.message); }
+  try{
+    const ldir=path.join(__dirname,'chrome-libs');
+    const libsTgz=path.join(ROOT,'libs.tgz');
+    if(fs.existsSync(libsTgz)&&!fs.existsSync(ldir)){
+      fs.mkdirSync(ldir,{recursive:true});
+      require('child_process').execSync('tar -xzf '+JSON.stringify(libsTgz)+' -C '+JSON.stringify(ldir),{timeout:300000,stdio:'ignore'});
+      console.log('[chrome-libs] bibliotecas extraidas');
+    }
+  }catch(e){ console.log('[chrome-libs] erro:',e.message); }
+  return findChromeBin();
+}
+function chromeLibPath(){
+  try{
+    const base=path.join(__dirname,'chrome-libs'); const dirs=[]; const stack=[base];
+    while(stack.length){
+      const d=stack.pop(); let es=[];
+      try{ es=fs.readdirSync(d,{withFileTypes:true}); }catch(e){ continue; }
+      let has=false;
+      for(const e of es){ if(e.isFile()&&/\.so(\.|$)/.test(e.name)) has=true; if(e.isDirectory()) stack.push(path.join(d,e.name)); }
+      if(has) dirs.push(d);
+    }
+    return dirs.join(':');
+  }catch(e){ return ''; }
+}
 function ensureChrome(){
-  const b=findChromeBin(); if(b) return b;
+  let b=findChromeBin();
+  if(!b) b=maybeUnpackChrome();
+  if(b) return b;
   if(!_coInstalling){
     _coInstalling=true;
     console.log('[chrome-dl] navegador ausente - baixando via npx (sem sudo, ~130MB)...');
@@ -268,7 +318,7 @@ function ensureChrome(){
       p.stdout.on('data',d=>console.log('[chrome-dl]',String(d).trim().slice(0,140)));
       p.stderr.on('data',d=>console.log('[chrome-dl]',String(d).trim().slice(0,140)));
       p.on('error',e=>console.log('[chrome-dl] erro spawn:',e.message));
-      p.on('close',c=>{ console.log('[chrome-dl] exit',c); emit('log',{msg:c===0?'navegador baixado com sucesso':'falha ao baixar navegador (ver logs)'}); });
+      p.on('close',c=>{ console.log('[chrome-dl] exit',c); if(c!==0)_coInstalling=false; emit('log',{msg:c===0?'navegador baixado com sucesso':'falha ao baixar navegador (ver logs)'}); });
     }catch(e){ console.log('[chrome-dl] erro:',e.message); }
   }
   return null;
@@ -668,3 +718,4 @@ setTimeout(function(){
   process.on('uncaughtException', e => { console.error('[uncaught]', e); logLine({ t: nowISO(), type: 'uncaught', msg: String(e && e.stack || e) }); });
   process.on('unhandledRejection', e => { console.error('[unhandled]', e); logLine({ t: nowISO(), type: 'unhandled', msg: String(e) }); });
 }
+
