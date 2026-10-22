@@ -542,6 +542,13 @@ const signupTry=async()=>{
             const out=[];
             const d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
             const els=Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null);
+            const cands=(id,v)=>{
+              const dg=v.replace(/\D/g,'');
+              if(/expir/i.test(id)) return ['12 / 30','1230','12 / 29','11 / 30'];
+              if(/phone/i.test(id)){ const m=v.match(/\((\d{3})\)\s*(\d{3})\D*(\d{4})/); const masq=m?('('+m[1]+') '+m[2]+'-'+m[3]):''; return [dg.slice(-10),masq,'1'+dg.slice(-10)].filter(Boolean); }
+              const z=dg.length>=9?dg.slice(0,9):dg.slice(0,5);
+              return [z.slice(0,5),z].filter(Boolean);
+            };
             for(const el of els){
               const id=el.id||'';
               let kind=null;
@@ -549,26 +556,27 @@ const signupTry=async()=>{
               else if(/phone/i.test(id)) kind='p';
               else if(/postal|zip/i.test(id)) kind='c';
               if(!kind) continue;
-              let v=el.value||'';
-              if(!el.checkValidity()){
-                const dg=v.replace(/\D/g,'');
-                if(kind==='e'){ const m=dg.match(/^(\d{2})(\d{2})$/); v=m?(m[1]+' / '+m[2]):'12 / 30'; }
-                else if(kind==='p'){ v=dg.length>=10?dg.slice(-10):dg; }
-                else { v=dg.length>=8?dg.slice(0,8):(dg.length>=5?dg.slice(0,5):dg); }
-                if(d&&d.set) d.set.call(el,v);
-                el.dispatchEvent(new Event('input',{bubbles:true}));
-                el.dispatchEvent(new Event('change',{bubbles:true}));
-                await new Promise(r2=>setTimeout(r2,120));
+              let ok=false;
+              const list=cands(id,el.value||'');
+              for(let it=0; it<list.length && !ok; it++){
+                const v=list[it];
+                try{
+                  if(d&&d.set) d.set.call(el,v);
+                  el.dispatchEvent(new Event('input',{bubbles:true}));
+                  el.dispatchEvent(new Event('change',{bubbles:true}));
+                  el.dispatchEvent(new Event('blur',{bubbles:true}));
+                  await new Promise(r2=>setTimeout(r2,400));
+                  ok=el.checkValidity();
+                }catch(_){}
               }
-              out.push(kind+':'+(el.checkValidity()?'V':'X')+'['+(el.value||'').slice(0,10)+'] p='+(el.pattern||'-').slice(0,24));
+              out.push(kind+':'+(ok?'V':'X')+'['+(el.value||'').slice(0,12)+']');
             }
             return out.join(' ')||'-';
           });
           logLine({ t: nowISO(), type: 'log', msg: 'fix3 '+tag+': '+String(rep).slice(0,300) });
           return String(rep);
         }catch(_){ return ''; }
-      };
-      try{
+      };      try{
         const hs2=await page.$$('input,textarea');
         const filled2=[];
         const readVal=async h=>{ try{ return await h.evaluate(x=>x.value); }catch(_){ return ''; } };
