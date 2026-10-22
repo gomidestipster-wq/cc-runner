@@ -209,10 +209,12 @@ async function ensureBuyer(page){
             else if(/phone|tel/i.test(id)||ty==='tel'||/ph/.test(id)) v='2065550147';
             else if(/address.?1|street|logradouro|enderec/.test(id)) v=street;
             else if(/address.?2|apt|suite|complemento|bldg/.test(id)) v=apt;
+            else if(/city/.test(id)) v='Springfield';
+            else if(/zip|postal|cep/.test(id)) v='62704';
             else continue;
             try{ if(d&&d.set) d.set.call(el,v); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); }catch(_){}
           }
-          for(const el of Array.from(document.querySelectorAll('select')).filter(x=>x.offsetParent!==null&&!x.value)){ const o=Array.from(el.options).find(o=>o.value); if(o){ el.value=o.value; el.dispatchEvent(new Event('change',{bubbles:true})); } }
+          for(const el of Array.from(document.querySelectorAll('select')).filter(x=>x.offsetParent!==null&&!x.value)){ const sid=String(el.id||el.name||'').toLowerCase(); let o=null; if(/state/.test(sid)){ o=Array.from(el.options).find(o=>/^Illinois$/i.test(String(o.text||'').trim()))||Array.from(el.options).find(o=>o.value&&!/armed forces/i.test(String(o.text||''))); } else { o=Array.from(el.options).find(o=>o.value); } if(o){ el.value=o.value; el.dispatchEvent(new Event('change',{bubbles:true})); } }
           for(const el of Array.from(document.querySelectorAll('input[type="checkbox"]')).filter(x=>x.offsetParent!==null&&!x.checked)){ try{ el.click(); }catch(_){} }
           const rs=Array.from(document.querySelectorAll('input[type="radio"]')).filter(x=>x.offsetParent!==null); const per=rs.find(x=>/personal|individual/i.test(String(x.id+x.name)))||rs[0]; if(per&&!per.checked){ try{ per.click(); }catch(_){} }
         },{email,pw,first,last,street:'742 Evergreen Terrace',apt:'Apt 120'});
