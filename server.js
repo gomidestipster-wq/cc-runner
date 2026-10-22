@@ -184,7 +184,7 @@ async function ensureBuyer(page){
             else if(/e-?mail|user/.test(id)) v=email;
             else if(/pass/.test(id)) v=pw;
             else if(/dob|birth|nasc/.test(id)) v='05/15/1990';
-            else if(/phone|tel/.test(id)) v='2065550147';
+            else if(/phone|tel/i.test(id)||ty==='tel'||/ph/.test(id)) v='2065550147';
             else continue;
             try{ if(d&&d.set) d.set.call(el,v); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); }catch(_){}
           }
