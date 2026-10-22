@@ -154,7 +154,7 @@ async function ensureBuyer(page){
     const first=parts[0], last=parts.slice(1).join(' ');
     try{ logLine({t:nowISO(),type:'log',msg:'bootstrap comprador: '+email}); }catch(_){}
     let ok=false;
-    try{ await p2.goto('https://www.sandbox.paypal.com/us/personal/signin',{waitUntil:'domcontentloaded',timeout:45000}); }catch(_){} await coSleep(6000);
+    try{ await p2.goto('https://www.sandbox.paypal.com/signin',{waitUntil:'domcontentloaded',timeout:45000}); }catch(_){} await coSleep(6000);
     try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"],div,span')).filter(e=>e.offsetParent!==null&&/don.?t have an account|create an account|sign ?up|cadastre/i.test(String(e.textContent||'').trim())&&String(e.textContent||'').trim().length<50); if(els.length){ try{ els[els.length-1].click(); }catch(_){} } }); }catch(_){}
     for(let step=0; step<10; step++){
       await coSleep(3500);
@@ -201,7 +201,7 @@ async function ensureBuyer(page){
     }catch(_){}
     ok=false;
     try{
-      await p2.goto('https://www.sandbox.paypal.com/us/personal/signin',{waitUntil:'domcontentloaded',timeout:45000});
+      await p2.goto('https://www.sandbox.paypal.com/signin',{waitUntil:'domcontentloaded',timeout:45000});
       await coSleep(5000);
       const e1=await p2.$('input[type="email"]');
       if(e1){
@@ -806,7 +806,7 @@ const signupTry=async()=>{
       try{ ({url}=await page.evaluate(()=>({url:location.href,text:document.body.innerText}))); txt=await page.evaluate(()=>document.body.innerText||''); }catch(e){}
       try{ const low=String(txt).toLowerCase(); if(/invalid|incorrect|required|nao (e )?v[iá]lid|verifique|corrija|mal formatad|error|aten[cç][aã]o/i.test(low)&&!/challenge|3d/.test(low)) { try{ logLine({ t: nowISO(), type: 'log', msg: 'erro pag: '+String(txt).replace(/\s+/g,' ').slice(0,300) }); }catch(_){} } }catch(e){}
       try{ logLine({ t: nowISO(), type: 'log', msg: 'pos-sub: '+String(txt).replace(/\s+/g,' ').slice(0,500) }); }catch(_){}
-if(/challenge|3d secure|3ds/i.test(url+txt)) return { ok:false, kind:'decline', message:'3d_secure', raw:{order:oid} };
+if(/challenge|3d secure|3ds/i.test(url+txt)){ try{ const mm=String(txt).match(/.{0,90}(?:challenge|3d secure|3ds).{0,130}/i); logLine({t:nowISO(),type:'log',msg:'3ds contexto: '+String(mm?mm[0]:'?').replace(/\s+/g,' ')}); }catch(_){} return { ok:false, kind:'decline', message:'3d_secure', raw:{order:oid} }; }
       // campos de codigo (OTP) -> tenta codigos genericos; se ficar, considera contingencia
       const codeId=await page.evaluate(()=>Array.from(document.querySelectorAll('input')).map(i=>i.id).find(id=>((/code/i.test(id)&&!/postal/i.test(id))||/otp|verif|digit|security|sms/i.test(id)))||null);
       if(codeId){
