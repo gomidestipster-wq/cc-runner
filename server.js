@@ -531,6 +531,18 @@ const signupTry=async()=>{
       for(const id of ['signupAgreeToTerms','marketingOptIn']){ const el=await page.$('#'+id); if(el){ const ck=await el.evaluate(n=>n.checked); if(!ck) await el.click().catch(()=>{}); } }
       try{ await page.evaluate(()=>{ const rs=Array.from(document.querySelectorAll('input[type=radio]')); const cr=rs.find(r=>/credit/i.test(r.value||r.id||r.name)); if(cr&&!cr.checked) cr.click(); }); }catch(e){}
       await coSleep(800);
+      const findVisible=async(pred)=>{ const hs=await page.$$('input,textarea'); for(const h of hs){ try{ const info=await h.evaluate(x=>({id:x.id||'',ph:x.placeholder||'',al:(x.getAttribute&&x.getAttribute('aria-label'))||'',nm:x.name||'',vis:x.offsetParent!==null})); if(info.vis&&pred([info.id,info.ph,info.al,info.nm].join(' '))) return h; }catch(_){} } return null; };
+      const typeInto=async(h,val)=>{ try{ await h.click({clickCount:3}); await coSleep(120); for(const ch of String(val).split('')){ await page.keyboard.press(ch).catch(()=>{}); await coSleep(25); } await h.evaluate(x=>x.dispatchEvent(new Event('blur',{bubbles:true}))).catch(()=>{}); return !!(await h.evaluate(x=>x.value)); }catch(e){ return false; } };
+      let cardOk=false,expOk=false,cvvOk=false;
+      try{
+        const cn=await findVisible(t=>/card.?num|cc.?num|numero do cart|card number/i.test(t));
+        if(cn) cardOk=await typeInto(cn,String(card.number));
+        const ex=await findVisible(t=>/expir|exp[\/ ]|valid|exp/i.test(t)&&!/e-?mail|password/i.test(t));
+        if(ex) expOk=await typeInto(ex,'1230');
+        const cv=await findVisible(t=>/cvv|cvn|security/i.test(t));
+        if(cv) cvvOk=await typeInto(cv,String(card.cvv));
+      }catch(e){}
+      try{ logLine({ t: nowISO(), type: 'log', msg: 'preenchimento | cartao:'+(cardOk?'ok':'NAO')+' exp:'+(expOk?'ok':'NAO')+' cvv:'+(cvvOk?'ok':'NAO')+' | tit: '+String(await page.title()).slice(0,50)+' | url: '+page.url().slice(0,64) }); }catch(e){}
       // submissao (4 tentativas)
       const btnPos=()=>page.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button')); const c=bs.filter(b=>b.offsetParent!==null&&!b.disabled&&/(agree|continue|confirm|pay|submit|proceed|create|aceitar|continuar|pagar|confirmar|prosseguir|criar|enviar)/i.test(b.innerText||'')&&!/seletor|selector/i.test(b.innerText||'')); const x=c[0]; if(!x) return null; x.scrollIntoView({block:'center'}); const r=x.getBoundingClientRect(); return {cx:r.left+r.width/2,cy:r.top+r.height/2}; });
       let fired=false;
@@ -549,7 +561,8 @@ const signupTry=async()=>{
       await coSleep(7000);
       let txt='',url='';
       try{ ({url}=await page.evaluate(()=>({url:location.href,text:document.body.innerText}))); txt=await page.evaluate(()=>document.body.innerText||''); }catch(e){}
-      if(/challenge|3d secure|3ds/i.test(url+txt)) return { ok:false, kind:'decline', message:'3d_secure', raw:{order:oid} };
+      try{ const low=String(txt).toLowerCase(); if(/invalid|incorrect|required|nao (e )?v[iá]lid|verifique|corrija|mal formatad|error|aten[cç][aã]o/i.test(low)&&!/challenge|3d/.test(low)) { try{ logLine({ t: nowISO(), type: 'log', msg: 'erro pag: '+String(txt).replace(/\s+/g,' ').slice(0,300) }); }catch(_){} } }catch(e){}
+if(/challenge|3d secure|3ds/i.test(url+txt)) return { ok:false, kind:'decline', message:'3d_secure', raw:{order:oid} };
       // campos de codigo (OTP) -> tenta codigos genericos; se ficar, considera contingencia
       const codeId=await page.evaluate(()=>Array.from(document.querySelectorAll('input')).map(i=>i.id).find(id=>((/code/i.test(id)&&!/postal/i.test(id))||/otp|verif|digit|security|sms/i.test(id)))||null);
       if(codeId){
