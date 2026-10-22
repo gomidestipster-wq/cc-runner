@@ -475,7 +475,8 @@ const signupTry=async()=>{
           if(!clicked) return 'SEM_BOTAO_CRIA_CONTA';
           await coSleep(5000+Math.floor(Math.random()*3000));
           const filled=[];
-          const fillBy=async(reS,val)=>{ try{ const ok=await page.evaluate((p)=>{ const re=new RegExp(p.re,'i'); const ins=[...document.querySelectorAll('input')].filter(x=>x.offsetParent!==null&&re.test((x.id||'')+(x.name||'')+(x.placeholder||'')+(x.getAttribute&&x.getAttribute('aria-label')||''))); for(const x of ins){ try{ x.focus(); x.click(); x.value=p.val; x.dispatchEvent(new Event('input',{bubbles:true})); x.dispatchEvent(new Event('change',{bubbles:true})); x.dispatchEvent(new Event('blur',{bubbles:true})); }catch(_){} } return ins.length; },[{re:reS,val}]); if(ok) filled.push(pw?'f'+ok:ok); }catch(e){} };
+          const fillBy=async(reS,val)=>{ try{ const handles=await page.$$('input'); for(const h of handles){ const info=await h.evaluate(x=>({id:x.id||'',n:x.name||'',ph:x.placeholder||'',al:(x.getAttribute&&x.getAttribute('aria-label'))||'',vis:x.offsetParent!==null})).catch(()=>null); if(!info||!info.vis) continue; if(new RegExp(reS,'i').test((info.id+' ')+info.n+' '+info.ph+' '+info.al)){ try{ await h.click({clickCount:3}); }catch(_){} await coSleep(100); for(const ch of String(val).split('')){ try{ await page.keyboard.press(ch); }catch(_){} await coSleep(14); } try{ await h.evaluate(x=>x.dispatchEvent(new Event('blur',{bubbles:true}))); }catch(_){} filled.push(reS.slice(0,12)); return true; } } }catch(e){} return false; };
+          let dumpIn=''; try{ dumpIn=await page.$$eval('input',els=>els.filter(x=>x.offsetParent!==null).map(x=>(x.id||x.name||x.placeholder||'?')+':'+(x.type||'')).join(' | ').slice(0,260)); }catch(_){}
           await fillBy('first.?name|firstname|fname',buyer.given);
           await fillBy('last.?name|lastname|lname',buyer.surname);
           await fillBy('e-?mail',buyer.email);
@@ -484,7 +485,7 @@ const signupTry=async()=>{
           let btn=null;
           try{ btn=await page.evaluate(()=>{ const bs=[...document.querySelectorAll('button,input[type="submit"],[role="button"]')].filter(b=>b.offsetParent!==null&&/create|next|continue|sign ?up|cadast|avancar|próximo/i.test(String(b.textContent||b.value||'').trim())); if(bs.length){ try{bs[bs.length-1].click();}catch(_){} return String(bs[bs.length-1].textContent||bs[bs.length-1].value||'').trim().slice(0,30); } return null; }); }catch(e){}
           await coSleep(6000+Math.floor(Math.random()*3000));
-          return 'cria_conta:'+clicked+'|botao:'+(btn||'nenhum');
+          return 'cria_conta:'+clicked+'|botao:'+(btn||'nenhum')+'|campos:'+filled.join(',')+'|inputs:'+dumpIn;
         }catch(e){ return 'signup-err:'+String(e.message).slice(0,60); }
       };
       try{ await page.waitForSelector(CARDSEL,{timeout:40000}); }catch(e){ let got=false;
