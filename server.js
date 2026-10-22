@@ -328,10 +328,10 @@ function ensureChrome(){
     }catch(e){ _coLog('ERRO SPAWN2: '+e.message); res(false); }
   });
   const _coListDir=()=>{ try{ const out=[]; const stack=[CHROME_DIR]; while(stack.length&&out.length<40){ const d=stack.pop(); for(const e of fs.readdirSync(d,{withFileTypes:true})){ const p=path.join(d,e.name); out.push(p.replace(CHROME_DIR,'.')); if(e.isDirectory()) stack.push(p); } } return out.length?out.join(', '):'<vazia>'; }catch(e){ return '<inlegivel>'; } };
-  async function _coFetchInstall(url){
+  async function _coFetchInstall(src){
     try{
-      const r=await fetch(url,{signal:AbortSignal.timeout(300000)});
-      if(!r.ok) throw new Error('http '+r.status);
+      let r,before='';
+      if(typeof src==='string'){ r=await fetch(src,{signal:AbortSignal.timeout(300000)}); before=src; if(!r.ok) throw new Error('http '+r.status+' em '+src); }
       const buf=Buffer.from(await r.arrayBuffer());
       fs.mkdirSync(CHROME_DIR,{recursive:true});
       fs.writeFileSync(path.join(CHROME_DIR,'dl.zip'),buf);
@@ -354,14 +354,30 @@ function ensureChrome(){
   async function _coDirect(){
     try{
       const txt=await (await fetch('https://googlechromelabs.github.io/chrome-for-testing/known-good-versions.json',{signal:AbortSignal.timeout(30000)})).text();
-      const ks=JSON.parse(txt).knownGoodVersions||[];
+      const JJ=JSON.parse(txt); const ks=(JJ.knownGoodVersions||JJ.versions||JJ.data||[]);
       for(const e of ks){ if(e.channel==='Stable'&&Array.isArray((e.downloads||{})['chrome-headless-shell'])){ const dl=(e.downloads['chrome-headless-shell']).find(x=>x.platform==='linux64'); if(dl){ _coLog('download direto: '+dl.url); return await _coFetchInstall(dl.url); } } }
       for(const e of ks){ if(e.channel==='Stable'&&Array.isArray((e.downloads||{})['chrome'])){ const dl=(e.downloads.chrome).find(x=>x.platform==='linux64'); if(dl){ _coLog('download direto (chrome completo): '+dl.url); return await _coFetchInstall(dl.url); } } }
-      throw new Error('nenhum candidato linux64 no json (total '+ks.length+' versoes)');
+      try{
+        const sj=JSON.parse(await (await fetch('https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json',{signal:AbortSignal.timeout(30000)})).text());
+        const ver=((sj.channels||{}).Stable||{}).version;
+        if(!ver) throw new Error('sem versao Stable no resumo');
+        for(const kind of ['chrome-headless-shell-linux64.zip','chrome-linux64.zip']){
+          const u='https://storage.googleapis.com/chrome-for-testing-public/'+ver+'/linux64/'+kind;
+          const hr=await fetch(u,{signal:AbortSignal.timeout(300000)});
+          if(hr.ok){ _coLog('fallback url ok: '+u); return await _coFetchInstall(hr); }
+        }
+      }catch(e2){ _coLog('fallback url falhou: '+e2.message); }
+      throw new Error('nenhum caminho de download (ks='+(ks.length)+' versoes)');
     }catch(e){ _coLog('json/direct falhou: '+e.message); return false; }
   }
   if(!_coInstalling && Date.now()>=(_coNext||0)){
     _coInstalling=true;
+    try{
+      for(const nm of ['chrome-headless-shell','chrome','chromium']){
+        const tree=path.join(CHROME_DIR,nm);
+        if(fs.existsSync(tree)){ require('child_process').execSync('rm -rf '+JSON.stringify(tree),{timeout:60000}); _coLog('instalacao parcial removida ('+nm+') - reinstalacao limpa'); }
+      }
+    }catch(e){ _coLog('falha na limpeza: '+String(e.message).slice(0,120)); }
     emit('log',{msg:'baixando navegador automaticamente...'});
     try{ fs.mkdirSync(CHROME_DIR,{recursive:true}); }catch(e){}
     let cliPath=null;
