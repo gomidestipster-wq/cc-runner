@@ -167,6 +167,28 @@ async function ensureBuyer(page){
         return {url:location.href,title:document.title,inp:sels===0?inp.slice(0,10):inp,sels:0?0:sels,btns:btns.slice(0,8)};
       }).catch(()=>null);
       if(!state){ try{ bl('boot s'+step+' estado nulo - aguardando pagina'); }catch(_){} await coSleep(2000); continue; }
+      try{
+        const otp=await p2.evaluate(()=>{
+          const ins=Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null);
+          const ot=ins.filter(x=>/phoneconfirmation|phone.?confir|otp/i.test(String(x.id||'')+' '+String(x.name||'')));
+          if(!ot.length) return null;
+          let code=(String(document.body.innerText||'').match(/\[QA\]\s*Enter\s*(\d{4,8})/i)||[])[1]||'222222';
+          const d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
+          let i=0;
+          for(const ch of code){
+            const el=ot[Math.min(i,ot.length-1)];
+            el.focus();
+            if(d&&d.set) d.set.call(el,String(el.value||'')+ch); else el.value=String(el.value||'')+ch;
+            el.dispatchEvent(new Event('input',{bubbles:true}));
+            el.dispatchEvent(new Event('change',{bubbles:true}));
+            i++;
+          }
+          return {code:code,n:ot.length};
+        });
+        if(otp){ bl('boot otp tel: '+otp.code+' em '+otp.n+' campos'); await coSleep(1500);
+          await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type=\"submit\"],a,[role=\"button\"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&/next|verify|confirm|enviar|continuar|check/i.test(String(x.innerText||x.value||'').trim())); if(bs.length) bs[0].click(); });
+          await coSleep(6000); continue; }
+      }catch(_){}
       if(/mobile-app/.test(state.url)){ try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"]')).filter(x=>x.offsetParent!==null&&/continue on web/i.test(String(x.innerText||'').trim())); if(els.length) els[els.length-1].click(); }); }catch(_){} continue; }
       try{ bl('boot s'+step+' | '+state.url.slice(0,64)+' | t:'+state.title.slice(0,26)+' | campos:'+JSON.stringify(state.inp).slice(0,240)+' | btns:'+state.btns.join(',').slice(0,110)); }catch(_){}
       if(/\/wallet|\/marge|onboarding\/(complete|success)|verifique.*email|confirm.*email|check.*email/i.test(state.url+' '+state.title)){ ok=true; break; }
