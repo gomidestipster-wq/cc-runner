@@ -467,8 +467,29 @@ async function chargeCheckout(card, amount, currency, buyer, descriptor){
         await coSleep(3500);
       }
       try{ logLine({t:nowISO(),type:'log',msg:'checkout estado: '+seen.join(' ;; ').slice(-650)}); }catch(e){}
+const signupTry=async()=>{
+        try{
+          const pw='Ccv'+(1000+rnd(8999))+'!'+pick(['x','k','m','t'])+rnd(9);
+          let clicked=null;
+          try{ clicked=await page.evaluate(()=>{ const els=[...document.querySelectorAll('a,button,[role="button"],[role="link"],div,span')].filter(e=>e.offsetParent!==null&&/create an account|criar (sua )?conta|don\'t have an account|sem uma conta/i.test((e.textContent||'').trim())&&(e.textContent||'').trim().length<60); if(!els.length) return null; let el=els[els.length-1]; try{el.scrollIntoView({block:'center'});}catch(_){} el.click(); return (el.textContent||'').trim().slice(0,40); }); }catch(e){}
+          if(!clicked) return 'SEM_BOTAO_CRIA_CONTA';
+          await coSleep(5000+Math.floor(Math.random()*3000));
+          const filled=[];
+          const fillBy=async(reS,val)=>{ try{ const ok=await page.evaluate((p)=>{ const re=new RegExp(p.re,'i'); const ins=[...document.querySelectorAll('input')].filter(x=>x.offsetParent!==null&&re.test((x.id||'')+(x.name||'')+(x.placeholder||'')+(x.getAttribute&&x.getAttribute('aria-label')||''))); for(const x of ins){ try{ x.focus(); x.click(); x.value=p.val; x.dispatchEvent(new Event('input',{bubbles:true})); x.dispatchEvent(new Event('change',{bubbles:true})); x.dispatchEvent(new Event('blur',{bubbles:true})); }catch(_){} } return ins.length; },[{re:reS,val}]); if(ok) filled.push(pw?'f'+ok:ok); }catch(e){} };
+          await fillBy('first.?name|firstname|fname',buyer.given);
+          await fillBy('last.?name|lastname|lname',buyer.surname);
+          await fillBy('e-?mail',buyer.email);
+          await fillBy('^password',pw);
+          await fillBy('confirm|repeat',pw);
+          let btn=null;
+          try{ btn=await page.evaluate(()=>{ const bs=[...document.querySelectorAll('button,input[type="submit"],[role="button"]')].filter(b=>b.offsetParent!==null&&/create|next|continue|sign ?up|cadast|avancar|próximo/i.test(String(b.textContent||b.value||'').trim())); if(bs.length){ try{bs[bs.length-1].click();}catch(_){} return String(bs[bs.length-1].textContent||bs[bs.length-1].value||'').trim().slice(0,30); } return null; }); }catch(e){}
+          await coSleep(6000+Math.floor(Math.random()*3000));
+          return 'cria_conta:'+clicked+'|botao:'+(btn||'nenhum');
+        }catch(e){ return 'signup-err:'+String(e.message).slice(0,60); }
+      };
       try{ await page.waitForSelector(CARDSEL,{timeout:40000}); }catch(e){ let got=false;
         for(let rt=0; rt<2 && !got; rt++){ await coSleep(8000+Math.floor(Math.random()*4000)); try{ await page.goto(appr.href,{waitUntil:'domcontentloaded',timeout:45000}); await coSleep(6000); got=!!(await page.$(CARDSEL)); }catch(_){} }
+        if(!got){ const su=await signupTry(); try{ await page.waitForSelector(CARDSEL,{timeout:25000}); got=true; }catch(_){} try{ logLine({t:nowISO(),type:'log',msg:'signup: '+String(su).slice(0,200)+' | url: '+page.url().slice(0,64)+' | tit: '+String(await page.title()).slice(0,40)}); }catch(_){} }
         if(!got){ let ti='',frames='',body=''; try{ ti=await page.title(); }catch(_){}
           try{ frames=page.frames().map(fr=>fr.url()).slice(0,4).join(' || ').slice(0,200); }catch(_){}
           try{ body=(await page.evaluate(()=>document.body.innerText)).replace(/\s+/g,' ').slice(0,220); }catch(_){}
