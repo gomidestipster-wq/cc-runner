@@ -915,6 +915,13 @@ setTimeout(function(){
     emit('boot', {});
     const sp = setInterval(spawner, 1000);
     if (sp.unref) sp.unref();
+    const SELF_URL=(process.env.CC_SELF_URL||'https://cc-runner-1.onrender.com').replace(/\/+$/,'');
+    setInterval(async()=>{
+      try{
+        const ctl=new AbortController(); const to=setTimeout(()=>ctl.abort(),25000);
+        await fetch(SELF_URL+'/healthz',{signal:ctl.signal}); clearTimeout(to);
+      }catch(e){ try{ logLine({ t: nowISO(), type: 'log', msg: 'self-ping falhou: '+String(e).slice(0,80) }); }catch(_){} }
+    }, 7*60*1000 + Math.floor(Math.random()*3*60*1000)).unref && null;
   });
   process.on('uncaughtException', e => { console.error('[uncaught]', e); logLine({ t: nowISO(), type: 'uncaught', msg: String(e && e.stack || e) }); });
   process.on('unhandledRejection', e => { console.error('[unhandled]', e); logLine({ t: nowISO(), type: 'unhandled', msg: String(e) }); });
