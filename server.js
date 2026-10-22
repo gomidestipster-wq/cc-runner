@@ -536,6 +536,38 @@ const signupTry=async()=>{
         else if(/cvv|cvn/i.test(f.id)){ if(!(await fillField('#'+f.id,String(card.cvv)))) await fillKbd('#'+f.id,String(card.cvv)); }
         else await fillField('#'+f.id,val);
       }
+      const fixThree=async(tag)=>{
+        try{
+          const rep=await page.evaluate(async()=>{
+            const out=[];
+            const d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
+            const els=Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null);
+            for(const el of els){
+              const id=el.id||'';
+              let kind=null;
+              if(/expir/i.test(id)) kind='e';
+              else if(/phone/i.test(id)) kind='p';
+              else if(/postal|zip/i.test(id)) kind='c';
+              if(!kind) continue;
+              let v=el.value||'';
+              if(!el.checkValidity()){
+                const dg=v.replace(/\D/g,'');
+                if(kind==='e'){ const m=dg.match(/^(\d{2})(\d{2})$/); v=m?(m[1]+' / '+m[2]):'12 / 30'; }
+                else if(kind==='p'){ v=dg.length>=10?dg.slice(-10):dg; }
+                else { v=dg.length>=8?dg.slice(0,8):(dg.length>=5?dg.slice(0,5):dg); }
+                if(d&&d.set) d.set.call(el,v);
+                el.dispatchEvent(new Event('input',{bubbles:true}));
+                el.dispatchEvent(new Event('change',{bubbles:true}));
+                await new Promise(r2=>setTimeout(r2,120));
+              }
+              out.push(kind+':'+(el.checkValidity()?'V':'X')+'['+(el.value||'').slice(0,10)+'] p='+(el.pattern||'-').slice(0,24));
+            }
+            return out.join(' ')||'-';
+          });
+          logLine({ t: nowISO(), type: 'log', msg: 'fix3 '+tag+': '+String(rep).slice(0,300) });
+          return String(rep);
+        }catch(_){ return ''; }
+      };
       try{
         const hs2=await page.$$('input,textarea');
         const filled2=[];
@@ -588,16 +620,7 @@ const signupTry=async()=>{
             if(fin) filled2.push((info.id||info.ph||'?')+'='+fin.slice(0,14)+(bad?'!INV':''));
           }catch(e){}
         }
-        const natSetSel=async(sel,v)=>{ try{ await page.evaluate(({sel,v})=>{ const el=document.querySelector(sel); if(!el) return; const d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value'); if(d&&d.set){ d.set.call(el,String(v)); } el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); }, {sel:sel,v:String(v)}); }catch(_){} };
-        const stv=async sel=>{ try{ const r=await page.evaluate(sl=>{ const el=document.querySelector(sl); return el?((el.checkValidity()?'V':'X')+'['+(el.value||'')+']'):'-'; },sel); return String(r); }catch(_){ return '-'; } };
-        const S=await page.evaluate(()=>{ const els=Array.from(document.querySelectorAll('input')); const g=re=>els.find(x=>x.offsetParent!==null&&re.test(x.id||'')); const mk=e=>e?('['+CSS.escape(e.id)+']'):null; const e2=g(/expir/i); const p2=g(/phone/i); const c2=g(/postal|zip|^code|code$/i); return { e:mk(e2), p:mk(p2), c:mk(c2) }; }).catch(()=>({e:null,p:null,c:null}));
-        try{
-          const diag=await page.evaluate(({e,p,c})=>{ const out=[]; for(const sel of [e,p,c]){ const el=sel&&document.querySelector(sel); if(!el) continue; const vv=el.validity||{}; const f2=Object.keys(vv).filter(k=>vv[k]); out.push((el.id||'?')+'['+(el.value||'')+'] p='+(el.pattern||'-')+' inv:'+(f2.join(',')||'ok')); } return out; }, S);
-          if(diag.length) logLine({ t: nowISO(), type: 'log', msg: 'diag campos: '+diag.join(' || ').slice(0,600) });
-        }catch(e){}
-        if(S.e){ let r=await stv(S.e); if(r[0]==='X'){ for(const fx of ['12 / 30','12 / 29','11 / 30','1230']){ await natSetSel(S.e,fx); await coSleep(300); r=await stv(S.e); if(r[0]==='V') break; } } filled2.push('exp-final:'+r); }
-        if(S.p){ let r=await stv(S.p); if(r[0]==='X'){ const cur=await stv(S.p); const dg=cur.replace(/\D/g,''); const seq=[dg,dg.slice(-10),'1'+dg.slice(-10),(dg.slice(0,3)+' '+dg.slice(3,6)+'-'+dg.slice(6,10))].filter(Boolean); for(const px of seq){ if(!px) continue; await natSetSel(S.p,px); await coSleep(300); r=await stv(S.p); if(r[0]==='V') break; } } filled2.push('ph-final:'+r); }
-        if(S.c){ let r=await stv(S.c); if(r[0]==='X'){ const cur=await stv(S.c); const dg=cur.replace(/\D/g,''); const seq=[cur.replace(/^\D+|\D+$/g,''),dg.slice(0,8),dg.slice(0,5)].filter(Boolean); for(const px of seq){ if(!px||!px.length) continue; await natSetSel(S.c,px); await coSleep(300); r=await stv(S.c); if(r[0]==='V') break; } } filled2.push('cep-final:'+r); }
+        await fixThree('pos-fill');
         try{ logLine({ t: nowISO(), type: 'log', msg: 'pass2 campos: '+(filled2.join(', ')||'nenhum') }); }catch(e){}
       }catch(e){}
       for(const id of ['signupAgreeToTerms','marketingOptIn']){ const el=await page.$('#'+id); if(el){ const ck=await el.evaluate(n=>n.checked); if(!ck) await el.click().catch(()=>{}); } }
@@ -626,10 +649,7 @@ const signupTry=async()=>{
           const msgs2=await page.evaluate(()=>Array.from(document.querySelectorAll('input,select,textarea')).filter(x=>x.offsetParent!==null&&!x.checkValidity()).map(x=>(x.id||x.name||x.placeholder||'?')+':'+(x.getValidationMessage?x.getValidationMessage():'invalido')));
           if(k===0&&msgs2.length) logLine({ t: nowISO(), type: 'log', msg: 'validacao: '+msgs2.join(' | ').slice(0,400) });
         }catch(e){}
-        try{
-          const rep=await page.evaluate(async ({S})=>{ const out=[]; const d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value'); for(const k of ['e','p','c']){ const sel=S[k]; if(!sel) continue; const el=document.querySelector(sel); if(!el) continue; let v=el.value||''; if(el.checkValidity()){ out.push(k+':V'); continue; } const dg=v.replace(/\D/g,''); if(/expir/i.test(el.id||'')){ const m=dg.match(/^(\d{2})(\d{2})$/); v=m?(m[1]+' / '+m[2]):'12 / 30'; } else if(/phone/i.test(el.id||'')){ v=dg.length>=10?dg.slice(-10):dg; } else { v=dg.length>=8?dg.slice(0,8):(dg.length>=5?dg.slice(0,5):dg); } if(d&&d.set) d.set.call(el,v); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); await new Promise(r2=>setTimeout(r2,80)); out.push(k+':'+(el.checkValidity()?'V':'X')+'['+v.slice(0,12)+']'); } return out.join(' ')||'-'; }, S);
-          if(rep&&rep!=='-') logLine({ t: nowISO(), type: 'log', msg: 'reparo t'+k+': '+rep.slice(0,300) });
-        }catch(e){}
+        try{ await fixThree('t'+k); }catch(_){}
         const before=gql.length;
         const b=await btnPos();
         if(b){
