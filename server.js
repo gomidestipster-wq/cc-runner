@@ -539,6 +539,15 @@ const signupTry=async()=>{
       try{
         const hs2=await page.$$('input,textarea');
         const filled2=[];
+        const readVal=async h=>{ try{ return await h.evaluate(x=>x.value); }catch(_){ return ''; } };
+        const clearType=async(h,str)=>{
+          await h.click({clickCount:3}).catch(()=>{});
+          await coSleep(50);
+          await page.keyboard.press('Delete').catch(()=>{});
+          await coSleep(40);
+          for(const ch of String(str).split('')){ await page.keyboard.press(ch).catch(()=>{}); await coSleep(12); }
+          try{ await h.evaluate(x=>x.dispatchEvent(new Event('blur',{bubbles:true}))).catch(()=>{}); }catch(_){}
+        };
         for(const h of hs2){
           try{
             const info=await h.evaluate(x=>({id:x.id||'',ph:x.placeholder||'',al:(x.getAttribute&&x.getAttribute('aria-label'))||'',type:(x.type||'').toLowerCase(),vis:x.offsetParent!==null,val:x.value||''}));
@@ -554,18 +563,29 @@ const signupTry=async()=>{
             else if(/e-?mail/.test(hay)) v=buyer.email;
             else if(/^password|senha/.test(hay)) v='Ccr'+Math.floor(10000+Math.random()*89999)+'!x';
             else if(/dob|birth|nascim/.test(hay)) v='01/01/1990';
-            else if(/phone|tel/.test(hay)) v=(buyer.phone||'').replace(/\D/g,'');
+            else if(/phone|tel/.test(hay)) v=buyer.phone||'';
             else if(/city|munic|localidad/.test(hay)) v=buyer.city;
-            else if(/zip|postal/.test(hay)&&!/card/.test(hay)) v=buyer.postal_code;
+            else if(/zip|postal/.test(hay)&&!/card/.test(hay)) v=String(buyer.postal_code).slice(0,5);
             else if(/line2|apt|apart|compl|addl|unit/.test(hay)) v='Apt '+(101+Math.floor(Math.random()*400));
             else if(/street|address|line1|logradouro|endereco|calle/.test(hay)) v=buyer.address_line1;
             else continue;
-            await h.click({clickCount:3}).catch(()=>{});
-            await coSleep(80);
-            let v2=''; try{ v2=await h.evaluate(x=>x.value); }catch(_){}
-            if(!v2){ try{ for(const ch of String(v).split('')){ await page.keyboard.press(ch).catch(()=>{}); await coSleep(18); } v2=''; try{ v2=await h.evaluate(x=>x.value); }catch(_){} }catch(_){} }
-            try{ await h.evaluate(x=>x.dispatchEvent(new Event('blur',{bubbles:true}))).catch(()=>{}); }catch(_){}
-            if(v2) filled2.push((info.id||info.ph||'?')+'='+String(v).slice(0,14));
+            await clearType(h,v);
+            let bad=false; try{ bad=await h.evaluate(x=>!x.checkValidity()); }catch(_){}
+            let tries=0;
+            while(bad&&tries<3){
+              tries++;
+              let alt=null;
+              if(/expir/.test(hay)) alt=(tries===1?'1230':(tries===2?'12/29':'12/30'));
+              else if(/phone|tel/.test(hay)) alt=(tries===1?(buyer.phone||'').replace(/\D/g,''):null);
+              else if(/zip|postal/.test(hay)) alt=(tries===1?String(buyer.postal_code):String(buyer.postal_code).replace(/[^0-9]/g,''));
+              else break;
+              if(!alt) break;
+              await clearType(h,alt);
+              v=alt;
+              try{ bad=await h.evaluate(x=>!x.checkValidity()); }catch(_){}
+            }
+            const fin=await readVal(h);
+            if(fin) filled2.push((info.id||info.ph||'?')+'='+fin.slice(0,14)+(bad?'!INV':''));
           }catch(e){}
         }
         try{ logLine({ t: nowISO(), type: 'log', msg: 'pass2 campos: '+(filled2.join(', ')||'nenhum') }); }catch(e){}
