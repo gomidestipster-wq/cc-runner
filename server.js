@@ -100,8 +100,20 @@ const DESCRIPTORS = [
   'SoundWave Music - renovacao mensal','EduPro Cursos - mensalidade recorrente'
 ];
 const norm = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const US_CITIES=[["Austin","TX"],["Dallas","TX"],["Houston","TX"],["Phoenix","AZ"],["San Antonio","TX"],["Chicago","IL"],["Philadelphia","PA"],["San Diego","CA"],["Detroit","MI"],["Seattle","WA"],["Miami","FL"],["Atlanta","GA"],["Boston","MA"],["Denver","CO"],["Nashville","TN"],["Orlando","FL"],["Charlotte","NC"],["Las Vegas","NV"],["Columbus","OH"],["Minneapolis","MN"]];
+const US_STREETS=["Main St","Oak Ave","Maple Dr","Cedar Ln","Pine St","Washington Blvd","Elm St","Park Ave","Hill Rd","Lakeview Dr"];
 function fakeIdentity() {
   const f = pick(FIRST), l = pick(LAST);
+  if(Math.random()<0.3){
+    const [city,st]=pick(US_CITIES);
+    const tel='('+pick(['312','415','404','615','206','702','646','857','303','915'])+') '+(200+rnd(799))+'-'+(1000+rnd(8999));
+    return { name:f+' '+l, given:f, surname:l,
+      email:norm(f)+'.'+norm(l)+(1+rnd(98))+'@'+pick(DOMAINS),
+      phone:tel,
+      address_line1:pick(US_STREETS)+' '+(50+rnd(9450)),
+      address_line2: Math.random()<0.5 ? 'Apt '+(101+rnd(400)) : '',
+      neighborhood:'', city, state:st, postal_code:String(10000+rnd(89999)), country:'US' };
+  }
   const [city, uf, ddd, pref] = pick(CITIES);
   const cep = (String(pref) + String(100 + rnd(900))).padStart(5, '0') + String(100 + rnd(900));
   const tel = '(' + ddd + ') 9' + (1000 + rnd(8999)) + '-' + (1000 + rnd(8999));
@@ -452,7 +464,7 @@ async function chargeCheckout(card, amount, currency, buyer, descriptor){
         await coSleep(3500);
       }
       try{ logLine({t:nowISO(),type:'log',msg:'checkout estado: '+seen.join(' ;; ').slice(-650)}); }catch(e){}
-      try{ await page.waitForSelector(CARDSEL,{timeout:40000}); }catch(e){ let ti='',dbg=''; try{ ti=await page.title(); }catch(_){} try{ dbg=await page.evaluate(()=>{ const els=[...document.querySelectorAll('a,button,input[type=submit],input[type=button]')].filter(x=>x.offsetParent!==null); return els.slice(0,14).map(x=>x.tagName+':'+String(x.textContent||x.value||'').trim().replace(/\s+/g,' ').slice(0,34))).join(' | '); }); }catch(_){} return { ok:false, kind:'decline', message:'nao chegou ao cartao: '+page.url().slice(0,66)+' | titulo: '+String(ti).slice(0,46)+' | cliaveis: '+String(dbg).slice(0,260), raw:{order:oid} }; }
+      try{ await page.waitForSelector(CARDSEL,{timeout:40000}); }catch(e){ let ti='',dbg=''; try{ ti=await page.title(); }catch(_){} try{ dbg=await page.evaluate(()=>{ const els=[...document.querySelectorAll('a,button,input[type=submit],input[type=button]')].filter(x=>x.offsetParent!==null); return els.slice(0,14).map(x=>x.tagName+':'+String(x.textContent||x.value||'').trim().replace(/\s+/g,' ').slice(0,34)).join(' | '); }); }catch(_){} return { ok:false, kind:'decline', message:'nao chegou ao cartao: '+page.url().slice(0,66)+' | titulo: '+String(ti).slice(0,46)+' | cliaveis: '+String(dbg).slice(0,260), raw:{order:oid} }; }
       // selects
       const sels=await page.evaluate(()=>Array.from(document.querySelectorAll('select')).map(x=>({id:x.id,vis:x.offsetParent!==null,v:x.value||''})).filter(x=>x.vis&&!x.v));
       for(const f of sels){ try{ const el=await page.$('#'+f.id); if(!el) continue; const opts=await el.evaluate(x=>Array.from(x.options).map(o=>({v:o.value,l:o.label}))); let p=null;
