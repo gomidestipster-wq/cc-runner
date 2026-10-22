@@ -499,16 +499,24 @@ const signupTry=async()=>{
           try{ logLine({t:nowISO(),type:'log',msg:'pagina falha | titulo: '+String(ti).slice(0,50)+' | corpo: '+body+' | frames: '+String(frames).slice(0,650)}); }catch(_){}
           return { ok:false, kind:'decline', message:'nao chegou ao cartao: '+page.url().slice(0,66)+' | titulo: '+String(ti).slice(0,40), raw:{order:oid} }; }
       }      // selects
-      const sels=await page.evaluate(()=>Array.from(document.querySelectorAll('select')).map(x=>({id:x.id,vis:x.offsetParent!==null,v:x.value||''})).filter(x=>x.vis&&!x.v));
-      for(const f of sels){ try{ const el=await page.$('#'+f.id); if(!el) continue; const opts=await el.evaluate(x=>Array.from(x.options).map(o=>({v:o.value,l:o.label}))); let p=null;
-        if(/country/i.test(f.id)) p=opts.find(o=>o.v==='BR');
-        else if(/nationality/i.test(f.id)) p=opts.find(o=>o.v==='BR');
-        else if(/phone/i.test(f.id)) p=opts.find(o=>/celular|mobile/i.test(o.v+o.l))||opts.find(o=>o.v&&o.v!=='');
-        else if(/state|region|uf/i.test(f.id)) p=opts.find(o=>o.v===buyer.state)||opts.find(o=>o.v==='SP')||opts.find(o=>o.v&&o.v!=='');
-        else if(/cardtype/i.test(f.id)) p=opts.find(o=>/visa|master|elo/i.test(o.v+o.l))||opts.find(o=>o.v&&o.v!=='');
-        else p=opts.find(o=>o.v&&o.v!=='');
-        if(p) await el.select(p.v);
-      }catch(e){} }
+      const selHandles=await page.$$('select');
+      const selLog=[];
+      for(let si=0; si<selHandles.length; si++){
+        try{
+          const el=selHandles[si];
+          const info=await el.evaluate(x=>({id:x.id||'',vis:x.offsetParent!==null,v:x.value||'',opts:Array.from(x.options).map(o=>({v:o.value,l:o.label||''}))})).catch(()=>null);
+          if(!info||!info.vis||info.v) continue;
+          let p=null;
+          if(/country|pais/i.test(info.id)) p=info.opts.find(o=>o.v==='BR')||info.opts.find(o=>/brazil|brasil/i.test(o.l));
+          else if(/nationality/i.test(info.id)) p=info.opts.find(o=>o.v==='BR')||info.opts.find(o=>/brazil|brasil/i.test(o.l));
+          else if(/phone/i.test(info.id)) p=info.opts.find(o=>/celular|mobile/i.test(o.v+o.l))||info.opts.find(o=>o.v&&o.v!=='');
+          else if(/state|region|uf/i.test(info.id)) p=info.opts.find(o=>o.v===buyer.state)||info.opts.find(o=>o.v==='SP')||info.opts.find(o=>o.v&&o.v!=='');
+          else if(/cardtype|card.?type|tipo/i.test(info.id)) p=info.opts.find(o=>/visa|master|elo/i.test(o.v+o.l))||info.opts.find(o=>o.v&&o.v!=='');
+          else p=info.opts.find(o=>o.v&&o.v!=='');
+          if(p){ await el.select(p.v).catch(()=>{}); selLog.push((info.id||'?')+'='+p.v.slice(0,8)); }
+        }catch(e){}
+      }
+      try{ logLine({ t: nowISO(), type: 'log', msg: 'selects: '+(selLog.join(', ')||'nenhum vazio') }); }catch(e){}
       // dados BR
       const parts=(buyer.address_line1||'').split(/,\s*/);
       const street=parts[0]||'Rua das Flores', hnum=(parts[parts.length-1]&&/^\d+$/.test(parts[parts.length-1]))?parts[parts.length-1]:'123';
@@ -543,13 +551,15 @@ const signupTry=async()=>{
         if(cv) cvvOk=await typeInto(cv,String(card.cvv));
       }catch(e){}
       try{ logLine({ t: nowISO(), type: 'log', msg: 'preenchimento | cartao:'+(cardOk?'ok':'NAO')+' exp:'+(expOk?'ok':'NAO')+' cvv:'+(cvvOk?'ok':'NAO')+' | tit: '+String(await page.title()).slice(0,50)+' | url: '+page.url().slice(0,64) }); }catch(e){}
+      try{ const vazios=await page.$$eval('input,textarea',els=>els.filter(x=>x.offsetParent!==null&&['text','tel','email','password'].includes((x.type||'').toLowerCase())&&!x.value).map(x=>x.id||x.name||x.placeholder||'?')); if(vazios.length) logLine({ t: nowISO(), type: 'log', msg: 'vazios antes de enviar: '+vazios.join(', ').slice(0,300) }); }catch(e){}
       // submissao (4 tentativas)
-      const btnPos=()=>page.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button')); const c=bs.filter(b=>b.offsetParent!==null&&!b.disabled&&/(agree|continue|confirm|pay|submit|proceed|create|aceitar|continuar|pagar|confirmar|prosseguir|criar|enviar)/i.test(b.innerText||'')&&!/seletor|selector/i.test(b.innerText||'')); const x=c[0]; if(!x) return null; x.scrollIntoView({block:'center'}); const r=x.getBoundingClientRect(); return {cx:r.left+r.width/2,cy:r.top+r.height/2}; });
+      const btnPos=()=>page.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button')); const c=bs.filter(b=>b.offsetParent!==null&&!b.disabled&&/(agree|continue|confirm|pay|submit|proceed|create|aceitar|continuar|pagar|confirmar|prosseguir|criar|enviar)/i.test(b.innerText||'')&&!/seletor|selector/i.test(b.innerText||'')); const x=c[0]; if(!x) return null; x.scrollIntoView({block:'center'}); const r=x.getBoundingClientRect(); return {cx:r.left+r.width/2,cy:r.top+r.height/2,label:(x.innerText||x.textContent||'').trim().slice(0,30)}; });
       let fired=false;
       for(let k=0;k<4 && !fired;k++){
         const before=gql.length;
         const b=await btnPos();
         if(b){
+          try{ logLine({ t: nowISO(), type: 'log', msg: 'submissao t'+k+' botao="'+String(b.label).slice(0,26)+'" url:'+page.url().slice(-50) }); }catch(_){}
           if(k===0){ await page.mouse.move(b.cx,b.cy); await coSleep(150); await page.mouse.down(); await coSleep(100); await page.mouse.up(); }
           else if(k===1) await page.mouse.click(b.cx,b.cy);
           else if(k===2){ try{ const cvv=await page.$('#cardCvv,#cvv'); if(cvv){ await cvv.focus(); await page.keyboard.press('Backspace'); await page.keyboard.type(String(card.cvv).slice(-1),{delay:120}); } await page.keyboard.press('Tab'); await page.keyboard.press('Enter'); }catch(e){} }
