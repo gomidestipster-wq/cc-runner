@@ -240,10 +240,15 @@ const coSleep=ms=>new Promise(r=>setTimeout(r,ms));
 /* ==== browser: acha no sistema ou baixa sozinho (sem sudo) em ./chrome ==== */
 const CHROME_DIR=path.join(__dirname,'chrome');
 const CHROME_CANDS=['/usr/bin/chromium','/usr/bin/chromium-browser','/usr/bin/google-chrome','/usr/bin/google-chrome-stable'];
+let _fcDbg=0;
 function findChromeBin(){
   const envp=process.env.CHROME_PATH||'';
   if(envp&&fs.existsSync(envp)) return envp;
   for(const c of CHROME_CANDS) if(fs.existsSync(c)) return c;
+  try{
+    const out=require('child_process').execSync('find '+JSON.stringify(CHROME_DIR)+' -maxdepth 6 -type f \\( -name "chrome-headless-shell" -o -name "chrome" -o -name "chromium" \\) 2>/dev/null | head -n 1',{timeout:10000,stdio:'pipe'}).toString().trim().split('\n')[0];
+    if(out){ return out; }
+  }catch(_){}
   try{
     const stack=[CHROME_DIR];
     while(stack.length){
@@ -255,6 +260,7 @@ function findChromeBin(){
       }
     }
   }catch(e){}
+  if(Date.now()>_fcDbg){ _fcDbg=Date.now()+30000; try{ require('fs').appendFileSync(LOG_FILE,JSON.stringify({t:new Date().toISOString(),type:'log',msg:'[find] NULL | CHROME_DIR='+CHROME_DIR+' | raiz: '+(fs.readdirSync(CHROME_DIR).join(',')||'<vazio>')}).slice(0,300)+'\n')}catch(_){}}
   return null;
 }
 let _coInstalling=false;
