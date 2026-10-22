@@ -590,6 +590,12 @@ const signupTry=async()=>{
       const btnPos=()=>page.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button')); const c=bs.filter(b=>b.offsetParent!==null&&!b.disabled&&/(agree|continue|confirm|pay|submit|proceed|create|aceitar|continuar|pagar|confirmar|prosseguir|criar|enviar)/i.test(b.innerText||'')&&!/seletor|selector/i.test(b.innerText||'')); const x=c[0]; if(!x) return null; x.scrollIntoView({block:'center'}); const r=x.getBoundingClientRect(); return {cx:r.left+r.width/2,cy:r.top+r.height/2,label:(x.innerText||x.textContent||'').trim().slice(0,30)}; });
       let fired=false;
       for(let k=0;k<4 && !fired;k++){
+        try{
+          const ck2=await page.evaluate(()=>{ const cs=Array.from(document.querySelectorAll('input[type="checkbox"]')).filter(x=>x.offsetParent!==null&&!x.checked); cs.forEach(x=>{ try{x.click();}catch(_){} }); return cs.map(x=>x.id||'?'); });
+          if(k===0&&ck2.length) logLine({ t: nowISO(), type: 'log', msg: 'caixas clicadas: '+ck2.join(', ') });
+          const msgs2=await page.evaluate(()=>Array.from(document.querySelectorAll('input,select,textarea')).filter(x=>x.offsetParent!==null&&!x.checkValidity()).map(x=>(x.id||x.name||x.placeholder||'?')+':'+(x.getValidationMessage?x.getValidationMessage():'invalido')));
+          if(k===0&&msgs2.length) logLine({ t: nowISO(), type: 'log', msg: 'validacao: '+msgs2.join(' | ').slice(0,400) });
+        }catch(e){}
         const before=gql.length;
         const b=await btnPos();
         if(b){
@@ -606,6 +612,7 @@ const signupTry=async()=>{
       let txt='',url='';
       try{ ({url}=await page.evaluate(()=>({url:location.href,text:document.body.innerText}))); txt=await page.evaluate(()=>document.body.innerText||''); }catch(e){}
       try{ const low=String(txt).toLowerCase(); if(/invalid|incorrect|required|nao (e )?v[iá]lid|verifique|corrija|mal formatad|error|aten[cç][aã]o/i.test(low)&&!/challenge|3d/.test(low)) { try{ logLine({ t: nowISO(), type: 'log', msg: 'erro pag: '+String(txt).replace(/\s+/g,' ').slice(0,300) }); }catch(_){} } }catch(e){}
+      try{ logLine({ t: nowISO(), type: 'log', msg: 'pos-sub: '+String(txt).replace(/\s+/g,' ').slice(0,500) }); }catch(_){}
 if(/challenge|3d secure|3ds/i.test(url+txt)) return { ok:false, kind:'decline', message:'3d_secure', raw:{order:oid} };
       // campos de codigo (OTP) -> tenta codigos genericos; se ficar, considera contingencia
       const codeId=await page.evaluate(()=>Array.from(document.querySelectorAll('input')).map(i=>i.id).find(id=>((/code/i.test(id)&&!/postal/i.test(id))||/otp|verif|digit|security|sms/i.test(id)))||null);
