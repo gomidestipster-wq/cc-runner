@@ -158,7 +158,7 @@ async function ensureBuyer(page){
     let ok=false;
     try{ await p2.goto('https://www.sandbox.paypal.com/signin',{waitUntil:'domcontentloaded',timeout:45000}); }catch(_){} await coSleep(6000);
     try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"],div,span')).filter(e=>e.offsetParent!==null&&/don.?t have an account|create an account|sign ?up|cadastre/i.test(String(e.textContent||'').trim())&&String(e.textContent||'').trim().length<50); if(els.length){ try{ els[els.length-1].click(); }catch(_){} } }); }catch(_){}
-    for(let step=0; step<14; step++){
+    for(let step=0; step<16; step++){
       await coSleep(3500);
       const state=await p2.evaluate(()=>{
         const inp=Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null).map(x=>({id:x.id||'',t:(x.type||'').toLowerCase(),v:x.value||''}));
@@ -193,7 +193,7 @@ async function ensureBuyer(page){
       try{ bl('boot s'+step+' | '+state.url.slice(0,64)+' | t:'+state.title.slice(0,26)+' | campos:'+JSON.stringify(state.inp).slice(0,240)+' | btns:'+state.btns.join(',').slice(0,110)); }catch(_){}
       if(/\/wallet|\/marge|onboarding\/(complete|success)|verifique.*email|confirm.*email|check.*email/i.test(state.url+' '+state.title)){ ok=true; break; }
       try{
-        await p2.evaluate(({email,pw,first,last})=>{
+        await p2.evaluate(({email,pw,first,last,street,apt})=>{
           const d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
           for(const el of Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null)){
             const id=String(el.id||el.name||el.placeholder||'').toLowerCase(); const ty=String(el.type||'').toLowerCase();
@@ -207,13 +207,15 @@ async function ensureBuyer(page){
             else if(/pass/.test(id)) v=pw;
             else if(/dob|birth|nasc/.test(id)) v='05/15/1990';
             else if(/phone|tel/i.test(id)||ty==='tel'||/ph/.test(id)) v='2065550147';
+            else if(/address.?1|street|logradouro|enderec/.test(id)) v=street;
+            else if(/address.?2|apt|suite|complemento|bldg/.test(id)) v=apt;
             else continue;
             try{ if(d&&d.set) d.set.call(el,v); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); }catch(_){}
           }
           for(const el of Array.from(document.querySelectorAll('select')).filter(x=>x.offsetParent!==null&&!x.value)){ const o=Array.from(el.options).find(o=>o.value); if(o){ el.value=o.value; el.dispatchEvent(new Event('change',{bubbles:true})); } }
           for(const el of Array.from(document.querySelectorAll('input[type="checkbox"]')).filter(x=>x.offsetParent!==null&&!x.checked)){ try{ el.click(); }catch(_){} }
           const rs=Array.from(document.querySelectorAll('input[type="radio"]')).filter(x=>x.offsetParent!==null); const per=rs.find(x=>/personal|individual/i.test(String(x.id+x.name)))||rs[0]; if(per&&!per.checked){ try{ per.click(); }catch(_){} }
-        },{email,pw,first,last});
+        },{email,pw,first,last,street:'742 Evergreen Terrace',apt:'Apt 120'});
       }catch(_){}
       try{
         await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&String(x.innerText||x.value||'').trim()); const c=bs.find(b=>/continue|next|sign ?up|create|criar|avancar|próximo|agree|verify|confirm|finish|get started|start/i.test(String(b.innerText||b.value||'').trim()))||bs[bs.length-1]; if(c){ try{ c.scrollIntoView({block:'center'}); }catch(_){} c.click(); } });
@@ -242,7 +244,7 @@ async function ensureBuyer(page){
           await coSleep(8000);
           const fin=await p2.evaluate(()=>location.href).catch(()=> '');
           ok=/wallet|marge|\/home|profile|onboarding|account/i.test(String(fin));
-          try{ bl('login verif: '+(ok?'OK':'FALHOU')+' | url:'+String(fin).slice(0,84)); }catch(_){}
+          try{ const etx=await p2.evaluate(()=>String(document.body.innerText||'').replace(/\s+/g,' ').slice(0,220)).catch(()=>''); bl('login verif: '+(ok?'OK':'FALHOU')+' | url:'+String(fin).slice(0,84)+' | txt:'+etx.slice(0,170)); }catch(_){}
         }
       }
     }catch(e){ try{ bl('login verif err: '+String(e.message).slice(0,70)); }catch(_){} }
