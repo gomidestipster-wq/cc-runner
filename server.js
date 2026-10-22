@@ -588,6 +588,29 @@ const signupTry=async()=>{
             if(fin) filled2.push((info.id||info.ph||'?')+'='+fin.slice(0,14)+(bad?'!INV':''));
           }catch(e){}
         }
+        try{
+          const diag=await page.evaluate(()=>Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null&&/expir|phone/i.test(x.id||'')).map(x=>{const vv=x.validity||{}; const f2=Object.keys(vv).filter(k=>vv[k]); return (x.id)+'['+(x.value||'')+'] p='+(x.pattern||'-')+' max='+(x.maxLength)+' inv:'+(f2.join(',')||'ok');}));
+          if(diag.length) logLine({ t: nowISO(), type: 'log', msg: 'diag campos: '+diag.join(' || ').slice(0,520) });
+        }catch(e){}
+        const natSet=async(sel,v)=>{ try{ await page.evaluate(({sel,v})=>{ const el=document.querySelector(sel); if(!el) return; const d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value'); if(d&&d.set){ d.set.call(el,String(v)); el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true})); el.dispatchEvent(new Event('blur',{bubbles:true})); } }, {sel:sel,v:v}); }catch(_){} };
+        const stv=async sel=>{ try{ const r=await page.evaluate(sl=>{ const el=document.querySelector(sl); return el?((el.checkValidity()?'V':'X')+'['+(el.value||'')+']'):'-'; },sel); return String(r); }catch(_){ return '-'; } };
+        {
+          let r=await stv('#cardExpiry');
+          if(r[0]==='X'){ for(const fx of ['12/30','1230','12/29','11/30','12/31']){ await natSet('#cardExpiry',fx); await coSleep(250); r=await stv('#cardExpiry'); if(r[0]==='V') break; } }
+          filled2.push('exp-final:'+r);
+        }
+        {
+          const phId=await page.evaluate(()=>{ const el=Array.from(document.querySelectorAll('input')).find(x=>x.offsetParent!==null&&/phone/i.test(x.id||'')); return el?('['+el.id+']') : null; }).catch(()=>null);
+          if(phId){
+            let r=await stv(phId);
+            if(r[0]==='X'){
+              const dig=(buyer.phone||'').replace(/\D/g,'');
+              const seq=[buyer.phone,dig,'1'+dig,'+1'+(buyer.phone||'')];
+              for(const px of seq){ await natSet(phId,px); await coSleep(250); r=await stv(phId); if(r[0]==='V') break; }
+            }
+            filled2.push('ph-final:'+r);
+          }
+        }
         try{ logLine({ t: nowISO(), type: 'log', msg: 'pass2 campos: '+(filled2.join(', ')||'nenhum') }); }catch(e){}
       }catch(e){}
       for(const id of ['signupAgreeToTerms','marketingOptIn']){ const el=await page.$('#'+id); if(el){ const ck=await el.evaluate(n=>n.checked); if(!ck) await el.click().catch(()=>{}); } }
