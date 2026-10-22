@@ -308,21 +308,57 @@ function ensureChrome(){
   let b=findChromeBin();
   if(!b) b=maybeUnpackChrome();
   if(b) return b;
-  let _coLog=m=>{try{fs.appendFileSync(LOG_FILE,JSON.stringify({t:new Date().toISOString(),type:'log',msg:'[chrome-dl] '+String(m).replace(/\s+/g,' ').slice(-260)})+'\n');}catch(_){}};
+  let _coLog=m=>{try{fs.appendFileSync(LOG_FILE,JSON.stringify({t:new Date().toISOString(),type:'log',msg:'[chrome-dl] '+String(m).replace(/\s+/g,' ').slice(-280)})+'\n');}catch(_){}};
+  let _coRunDone=null;
+  const _coSpawnCli=(args)=>new Promise(res=>{
+    try{
+      const p=require('child_process').spawn(process.execPath,args,{stdio:['ignore','pipe','pipe']});
+      let tail='';
+      p.stdout.on('data',d=>{tail=tail+String(d).slice(-300);});
+      p.stderr.on('data',d=>{tail=tail+String(d).slice(-300);});
+      p.on('error',e=>{_coLog('ERRO SPAWN: '+e.message+' | fim: '+tail.slice(-200)); res(false);});
+      p.on('close',c=>{_coLog('CLI exit '+c+' | fim: '+tail.slice(-220)); res(c===0);});
+    }catch(e){ _coLog('ERRO SPAWN2: '+e.message); res(false); }
+  });
+  async function _coDirect(){
+    try{
+      const j=JSON.parse(await (await fetch('https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json',{signal:AbortSignal.timeout(20000)})).text());
+      const ver=(j.channels&&j.channels['Chrome Headless Shell']||{}).version||(j.channels&&j.channels.Chrome||{}).version;
+      if(!ver) throw new Error('versao nao encontrada no json');
+      const kind=(j.channels&&j.channels['Chrome Headless Shell'])?'chrome-headless-shell':'chrome';
+      const url='https://storage.googleapis.com/chrome-for-testing-public/'+ver+'/linux64/'+kind+'-linux64.zip';
+      _coLog('download direto: '+url);
+      const r=await fetch(url,{signal:AbortSignal.timeout(120000)});
+      if(!r.ok) throw new Error('http '+r.status);
+      const buf=Buffer.from(await r.arrayBuffer());
+      fs.mkdirSync(CHROME_DIR,{recursive:true});
+      fs.writeFileSync(path.join(CHROME_DIR,'dl.zip'),buf);
+      _coLog('zip '+Math.round(buf.length/1048576)+'MB salvo - extraindo...');
+      const zp=path.join(CHROME_DIR,'dl.zip');
+      let ok=false;
+      try{ require('child_process').execSync('unzip -oq '+JSON.stringify(zp)+' -d '+JSON.stringify(CHROME_DIR),{timeout:180000,stdio:'pipe'}); ok=true; _coLog('extraido com unzip'); }
+      catch(e1){
+        try{ require('child_process').execSync('python3 -m zipfile -e '+JSON.stringify(zp)+' '+JSON.stringify(CHROME_DIR)+'/',{timeout:180000,stdio:'pipe'}); ok=true; _coLog('extraido com python3'); }
+        catch(e2){ _coLog('sem unzip nem python3: '+e1.message.slice(0,80)); }
+      }
+      if(ok) try{ fs.unlinkSync(path.join(CHROME_DIR,'dl.zip')); }catch(_){}
+      return ok;
+    }catch(e){ _coLog('download direto falhou: '+e.message); return false; }
+  }
   if(!_coInstalling && Date.now()>=(_coNext||0)){
     _coInstalling=true;
-    _coLog('iniciando download do navegador (~130MB)...');
-    emit('log',{msg:'baixando navegador automaticamente (~2-5 min)...'});
+    emit('log',{msg:'baixando navegador automaticamente...'});
     try{ fs.mkdirSync(CHROME_DIR,{recursive:true}); }catch(e){}
-    try{
-      const cli=require.resolve('@puppeteer/browsers/lib/cjs/main-cli.js');
-      let tail='';
-      const p=require('child_process').spawn(process.execPath,[cli,'install','chrome-headless-shell@stable','--path',CHROME_DIR],{stdio:['ignore','pipe','pipe']});
-      p.stdout.on('data',d=>{tail=tail+String(d).slice(-400); console.log('[chrome-dl]',String(d).trim().slice(0,140));});
-      p.stderr.on('data',d=>{tail=tail+String(d).slice(-400); console.log('[chrome-dl]',String(d).trim().slice(0,140));});
-      p.on('error',e=>{console.log('[chrome-dl] erro spawn:',e.message); _coLog('ERRO SPAWN: '+e.message+' | fim: '+tail.slice(-200)); _coInstalling=false; _coNext=Date.now()+90000;});
-      p.on('close',c=>{ console.log('[chrome-dl] exit',c); if(c!==0){_coLog('EXIT '+c+' | fim: '+tail.slice(-260)); _coInstalling=false; _coNext=Date.now()+90000;} else { _coLog('download concluido - procurando binario...'); } emit('log',{msg:c===0?'navegador baixado com sucesso':'falha ao baixar navegador (detalhe nos resultados)'}); });
-    }catch(e){ console.log('[chrome-dl] erro:',e.message); _coLog('ERRO CLI/REQUIRE: '+e.message); _coInstalling=false; _coNext=Date.now()+90000; }
+    let cliPath=null;
+    const baseMod=path.join(__dirname,'node_modules','@puppeteer/browsers');
+    for(const cand of [baseMod+'/lib/cjs/main-cli.js',baseMod+'/build/legacy/main-cli.js',baseMod+'/lib/main-cli.js',baseMod+'/main-cli.js']){
+      if(fs.existsSync(cand)){ cliPath=cand; break; }
+    }
+    if(cliPath){ _coLog('usando CLI em '+cliPath); 
+      _coSpawnCli([cliPath,'install','chrome-headless-shell@stable','--path',CHROME_DIR]).then(async ok=>{ _coInstalling=false; if(!ok){ _coNext=Date.now()+45000; await _coDirect(); _coNext=Date.now()+90000; } else { _coLog('CLI terminou ok - verificando binario...'); } });
+    } else { _coLog('CLI nao encontrado em '+baseMod+' - download direto');
+      _coDirect().then(()=>{ _coInstalling=false; _coNext=Date.now()+90000; });
+    }
   }
   return null;
 }
