@@ -438,15 +438,20 @@ async function chargeCheckout(card, amount, currency, buyer, descriptor){
     const fillKbd=async(sel,val)=>{ try{ const el=await page.$(sel); if(!el) return false; await el.click({clickCount:3}); await coSleep(200); for(const ch of val.split('')){ await page.keyboard.press(ch); await coSleep(90);} await coSleep(150); return !!(await el.evaluate(n=>n.value)); }catch(e){ return false; } };
     const typeHuman=async(sel,val)=>{ try{ const el=await page.$(sel); if(!el) return false; await el.click({clickCount:3}); await coSleep(300); for(const ch of val.split('')){ await page.keyboard.press(ch); await coSleep(90+Math.floor(Math.random()*80)); } await coSleep(250); await el.evaluate(n=>n.dispatchEvent(new Event('blur',{bubbles:true}))).catch(()=>{}); return true; }catch(e){ return false; } };
     try{
+      const CARDSEL='#cardNumber,#cc,input[name="cc-num"],input[aria-label*="card number" i],[data-qa="card-number"]';
       await page.goto(appr.href,{waitUntil:'domcontentloaded',timeout:60000});
-      await coSleep(5000);
-      for(let gi=0;gi<3 && !/checkoutweb|xoonboarding/.test(page.url());gi++){
-        let href=null;
-        try{ href=await page.$eval('#guestCheckout',a=>a.href); }catch(e){}
-        if(href){ href=href.replace(/country\.x=[^&]*/,'country.x=BR').replace(/locale\.x=[^&]*/,'locale.x=pt_BR'); try{ await page.goto(href,{waitUntil:'networkidle2',timeout:60000}); }catch(e){} await coSleep(4000); }
-        else await coSleep(3000);
+      await coSleep(4000);
+      const seen=[]; let nav2=false, clickedG=null;
+      for(let gi=0;gi<6 && !(await page.$(CARDSEL));gi++){
+        let url='',ti='';
+        try{ url=page.url().slice(0,70); ti=(await page.title()).slice(0,55); }catch(e){}
+        if(!nav2){ try{ const href=await page.$eval('#guestCheckout',a=>a.href); if(href){ nav2=true; href=href.replace(/country\.x=[^&]*/,'country.x=BR').replace(/locale\.x=[^&]*/,'locale.x=pt_BR'); seen.push('gi'+gi+':guestHref'); await page.goto(href,{waitUntil:'networkidle2',timeout:60000}).catch(()=>{}); await coSleep(3000); } }catch(e){} }
+        if(!clickedG){ try{ const h=await page.evaluate(()=>{ const els=[...document.querySelectorAll('a,button,input[type=submit],input[type=button]')]; const g=els.find(e=>/guest|convidado|sem conta|without an account/i.test(((e.textContent||'')+(e.value||''))))&&false || els.find(e=>/convidado|guest|sem conta|without an account/i.test(((e.textContent||'')+(e.value||'')) ) && e.offsetParent!==null); if(g){ g.click(); return g.tagName+':'+((g.textContent||g.value||'').trim().slice(0,26)); } return null; }); if(h){ clickedG=h; seen.push('gi'+gi+':CLICK '+h); } }catch(e){} }
+        seen.push('gi'+gi+':'+url+'|'+ti);
+        await coSleep(3500);
       }
-      try{ await page.waitForSelector('#cardNumber,#cc',{timeout:20000}); }catch(e){ return { ok:false, kind:'decline', message:'pagina de pagamento nao carregou: '+page.url().slice(0,60), raw:{order:oid} }; }
+      try{ emit('log',{msg:'checkout estado: '+seen.join(' ;; ').slice(-600)}); }catch(e){}
+      try{ await page.waitForSelector(CARDSEL,{timeout:40000}); }catch(e){ let ti=''; try{ ti=await page.title(); }catch(_){} return { ok:false, kind:'decline', message:'pagina de pagamento nao carregou: '+page.url().slice(0,70)+' | titulo: '+String(ti).slice(0,50), raw:{order:oid} }; }
       // selects
       const sels=await page.evaluate(()=>Array.from(document.querySelectorAll('select')).map(x=>({id:x.id,vis:x.offsetParent!==null,v:x.value||''})).filter(x=>x.vis&&!x.v));
       for(const f of sels){ try{ const el=await page.$('#'+f.id); if(!el) continue; const opts=await el.evaluate(x=>Array.from(x.options).map(o=>({v:o.value,l:o.label}))); let p=null;
