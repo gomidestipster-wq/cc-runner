@@ -314,17 +314,21 @@ function ensureChrome(){
   let b=findChromeBin();
   if(!b) b=maybeUnpackChrome();
   if(b) return b;
-  let _coLog=m=>{try{fs.appendFileSync(LOG_FILE,JSON.stringify({t:new Date().toISOString(),type:'log',msg:'[chrome-dl] '+String(m).replace(/\s+/g,' ').slice(-280)})+'\n');}catch(_){}};
+  let _coLog=m=>{try{fs.appendFileSync(LOG_FILE,JSON.stringify({t:new Date().toISOString(),type:'log',msg:'[chrome-dl] '+String(m).replace(/\s+/g,' ').slice(-900)})+'\n');}catch(_){}};
   let _coRunDone=null;
   const _coSpawnCli=(args)=>new Promise(res=>{
     try{
       const p=require('child_process').spawn(process.execPath,args,{stdio:['ignore','pipe','pipe']});
       let tail='';
       let head='';
-      p.stdout.on('data',d=>{if(!head)head=String(d); tail=tail+String(d).slice(-300);});
-      p.stderr.on('data',d=>{if(!head)head=String(d); tail=tail+String(d).slice(-300);});
+      const eat=d=>{ const t=String(d); head=(head+t).slice(0,1200); tail=tail+t.slice(-300); };
+      p.stdout.on('data',eat);
+      p.stderr.on('data',eat);
       p.on('error',e=>{_coLog('ERRO SPAWN: '+e.message+' | saida: '+head.slice(0,260)+' | fim: '+tail.slice(-180)+' | pasta: '+_coListDir()); res(false);});
-      p.on('close',c=>{_coLog('CLI exit '+c+' | saida: '+head.slice(0,260)+' | fim: '+tail.slice(-180)+' | pasta: '+_coListDir()); res(c===0);});
+      p.on('close',async c=>{ try{ const df=require('child_process').execSync('df -m '+JSON.stringify(CHROME_DIR),{timeout:10000,stdio:'pipe'}).toString().trim().split('\n').pop(); }catch(e){ const df='df-falhou:'+e.message.slice(0,80); }
+        _coLog('CLI exit '+c+' | disco: '+df+' | saida: '+head.slice(0,900)+' | fim: '+tail.slice(-160)+' | pasta: '+_coListDir());
+        const okbin=findChromeBin(); _coLog('apos CLI binario='+(okbin||'NAO'));
+        res(c===0&&!!okbin); });
     }catch(e){ _coLog('ERRO SPAWN2: '+e.message); res(false); }
   });
   const _coListDir=()=>{ try{ const out=[]; const stack=[CHROME_DIR]; while(stack.length&&out.length<40){ const d=stack.pop(); for(const e of fs.readdirSync(d,{withFileTypes:true})){ const p=path.join(d,e.name); out.push(p.replace(CHROME_DIR,'.')); if(e.isDirectory()) stack.push(p); } } return out.length?out.join(', '):'<vazia>'; }catch(e){ return '<inlegivel>'; } };
