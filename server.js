@@ -151,7 +151,9 @@ async function ensureBuyer(page){
     await p2.setDefaultTimeout(45000);
     await p2.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36').catch(()=>{});
     const email='ccbot'+Math.floor(100+Math.random()*899)+Date.now().toString().slice(-5)+'@gmail.com';
-    const pw='Ccb'+Math.floor(100000+Math.random()*899999)+'Xk';
+    let pd=''; for(let k=0;k<6;k++) pd+=String(Math.floor(Math.random()*10));
+    let ptry=0; while(/012|123|234|345|456|567|678|789|987|876|765|654|543|432|321|210/.test(pd)&&ptry++<50){ pd=pd.slice(0,5)+String(Math.floor(Math.random()*10)); }
+    const pw='Ccb'+pd+'!x';
     const parts=String(pick(FIRST)+' '+pick(LAST)).split(' ');
     const first=parts[0], last=parts.slice(1).join(' ');
     try{ bl('bootstrap comprador: '+email); }catch(_){}
@@ -191,7 +193,7 @@ async function ensureBuyer(page){
       }catch(_){}
       if(/mobile-app/.test(state.url)){ try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"]')).filter(x=>x.offsetParent!==null&&/continue on web/i.test(String(x.innerText||'').trim())); if(els.length) els[els.length-1].click(); }); }catch(_){} continue; }
       try{ bl('boot s'+step+' | '+state.url.slice(0,64)+' | t:'+state.title.slice(0,26)+' | campos:'+JSON.stringify(state.inp).slice(0,240)+' | btns:'+state.btns.join(',').slice(0,110)+' | txt:'+String(state.txt||'').slice(0,150)); }catch(_){}
-      if(/\/wallet|\/marge|onboarding\/(complete|success)|verifique.*email|confirm.*email|check.*email/i.test(state.url+' '+state.title)){ ok=true; break; }
+      if(/\/wallet|\/marge|money\/flow|myaccount|onboarding\/(complete|success)|verifique.*email|confirm.*email|check.*email/i.test(state.url+' '+state.title)){ ok=true; break; }
       try{
         await p2.evaluate(({email,pw,first,last,street,apt})=>{
           const d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
