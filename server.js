@@ -158,7 +158,7 @@ async function ensureBuyer(page){
     let ok=false;
     try{ await p2.goto('https://www.sandbox.paypal.com/signin',{waitUntil:'domcontentloaded',timeout:45000}); }catch(_){} await coSleep(6000);
     try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"],div,span')).filter(e=>e.offsetParent!==null&&/don.?t have an account|create an account|sign ?up|cadastre/i.test(String(e.textContent||'').trim())&&String(e.textContent||'').trim().length<50); if(els.length){ try{ els[els.length-1].click(); }catch(_){} } }); }catch(_){}
-    for(let step=0; step<16; step++){
+    for(let step=0; step<18; step++){
       await coSleep(3500);
       const state=await p2.evaluate(()=>{
         const inp=Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null).map(x=>({id:x.id||'',t:(x.type||'').toLowerCase(),v:x.value||''}));
@@ -220,7 +220,7 @@ async function ensureBuyer(page){
         },{email,pw,first,last,street:'742 Evergreen Terrace',apt:'Apt 120'});
       }catch(_){}
       try{
-        await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&String(x.innerText||x.value||'').trim()); const c=bs.find(b=>{const t=String(b.innerText||b.value||'').trim();return !/user agreement|privacy statement|e-sign|legal|contact|feedback/i.test(t)&&/continue|next|sign ?up|create|criar|avancar|próximo|agree|verify|confirm|finish|get started|start/i.test(t);})||bs[bs.length-1]; if(c){ try{ c.scrollIntoView({block:'center'}); }catch(_){} c.click(); } });
+        await p2.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&String(x.innerText||x.value||'').trim()); const c=bs.find(b=>{const t=String(b.innerText||b.value||'').trim();return !/user agreement|privacy statement|e-sign|legal|contact|feedback/i.test(t)&&/not ?now|skip|pular|continue|next|sign ?up|create|criar|avancar|próximo|agree|verify|confirm|finish|get started|start/i.test(t);})||bs[bs.length-1]; if(c){ try{ c.scrollIntoView({block:'center'}); }catch(_){} c.click(); } });
       }catch(_){}
     }
     try{
