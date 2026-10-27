@@ -265,22 +265,31 @@ async function tryBuyerLogin(page,CARDSEL){
   const b=readBuyer();
   if(!b||!b.email||!b.ok) return false;
   try{
-    const emailH=(await page.$('input[type="email"]'))||(await page.$('input[id*="mail" i]'));
-    if(!emailH) return false;
+    const frames=()=>[page.mainFrame()].concat(page.frames().filter(x=>x!==page.mainFrame()));
+    const findInput=async(sel)=>{ for(const fr of frames()){ try{ const h=await fr.$(sel); if(h) return h; }catch(_){} } return null; };
+    const clickBtn=async(rx)=>{ for(const fr of frames()){ try{ const r=await fr.evaluate(rxs=>{ const re2=new RegExp(rxs,'i'); const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&re2.test(String(x.innerText||x.value||'').trim())); if(bs.length){ try{ bs[0].scrollIntoView({block:'center'}); }catch(_){} bs[0].click(); return true; } return false; },rx); if(r) return true; }catch(_){} } return false; };
+    let emailH=(await findInput('input[type="email"]'))||(await findInput('input[id*="mail" i]'));
+    if(!emailH){
+      const t1=await page.evaluate(()=>String(document.body.innerText||'').replace(/\s+/g,' ').slice(0,180)).catch(()=>'');
+      try{ logLine({t:nowISO(),type:'log',msg:'login comprador: SEM_EMAIL | url:'+page.url().slice(0,72)+' | txt:'+t1}); }catch(_){}
+      return false;
+    }
     await emailH.click({clickCount:3}).catch(()=>{});
     for(const ch of b.email.split('')){ await page.keyboard.press(ch).catch(()=>{}); await coSleep(12); }
-    await page.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&/continue|next|próximo|sign ?in|log ?in|entrar/i.test(String(x.innerText||x.value||'').trim())); if(bs.length){ try{ bs[0].scrollIntoView({block:'center'}); }catch(_){} bs[0].click(); } }).catch(()=>{});
+    await clickBtn('continue|next|próximo|sign ?in|log ?in|entrar');
     await coSleep(5000+Math.floor(Math.random()*2500));
-    const passH=await page.$('input[type="password"]');
+    const passH=await findInput('input[type="password"]');
     if(passH){
       await passH.click({clickCount:3}).catch(()=>{});
       for(const ch of b.password.split('')){ await page.keyboard.press(ch).catch(()=>{}); await coSleep(12); }
-      await page.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,input[type="submit"],a,[role="button"]')).filter(x=>x.offsetParent!==null&&!x.disabled&&/(sign ?in|log ?in|entrar|continue|próximo|confirm)/i.test(String(x.innerText||x.value||'').trim())); if(bs.length) bs[0].click(); }).catch(()=>{});
+      await clickBtn('sign ?in|log ?in|entrar|continue|próximo|confirm');
       await coSleep(7000);
     }
-    try{ await page.evaluate(()=>{ const bs=Array.from(document.querySelectorAll('button,a,[role="button"]')).filter(x=>x.offsetParent!==null&&/(credit card|debit card|add.*card|new card|use.*card|cart[aã]o de cr[eé]dito|pagar com cart)/i.test(String(x.innerText||'').trim())); if(bs.length) bs[0].click(); }).catch(()=>{}); await coSleep(4000); }catch(_){}
-    const hasCard=!!(await page.$(CARDSEL));
-    try{ logLine({t:nowISO(),type:'log',msg:'login comprador: '+(hasCard?'FORM_CARTAO_OK':'SEM_FORM')+' | url:'+page.url().slice(0,72)+' | tit:'+String(await page.title()).slice(0,40)}); }catch(_){}
+    try{ await clickBtn('credit card|debit card|add.*card|new card|use.*card|cart[aã]o de cr[eé]dito|pagar com cart'); await coSleep(4000); }catch(_){}
+    let hasCard=!!(await page.$(CARDSEL));
+    if(!hasCard){ for(const fr of page.frames()){ try{ if(await fr.$(CARDSEL)){ hasCard=true; break; } }catch(_){} } }
+    const t2=await page.evaluate(()=>String(document.body.innerText||'').replace(/\s+/g,' ').slice(0,180)).catch(()=>'');
+    try{ logLine({t:nowISO(),type:'log',msg:'login comprador: '+(hasCard?'FORM_CARTAO_OK':'SEM_FORM')+' | url:'+page.url().slice(0,72)+' | txt:'+t2}); }catch(_){}
     return hasCard;
   }catch(e){ try{ logLine({t:nowISO(),type:'log',msg:'login comprador err: '+String(e.message).slice(0,60)}); }catch(_){} return false; }
 }
@@ -604,7 +613,13 @@ async function chargeCheckout(card, amount, currency, buyer, descriptor){
     if(mobProfile){ await page.setViewport({width:390,height:844,isMobile:true,hasTouch:true}); await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36').catch(()=>{}); }
     else { await page.setViewport({width:1280,height:1000}); await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36').catch(()=>{}); }
     await page.evaluateOnNewDocument(()=>{ try{ Object.defineProperty(navigator,'webdriver',{get:()=>undefined}); Object.defineProperty(navigator,'languages',{get:()=>['pt-BR','pt','en']}); }catch(e){} }).catch(()=>{});
-    { const _bu=readBuyer(); if(_bu&&Array.isArray(_bu.cookies)&&_bu.cookies.length){ try{ await page.setCookie(_bu.cookies.filter(c=>c.name&&c.domain).map(c=>({name:c.name,value:c.value,domain:c.domain,path:c.path||'/',secure:!!c.secure,httpOnly:!!c.httpOnly,sameSite:c.sameSite||'Lax'}))); logLine({t:nowISO(),type:'log',msg:'sessao restaurada: '+_bu.cookies.length+' cookies de '+_bu.email}); }catch(_){} } }
+    { const _bu=readBuyer();
+      if(_bu&&Array.isArray(_bu.cookies)&&_bu.cookies.length){
+        let okc=0,failc=0;
+        for(const c of _bu.cookies){ try{ await page.setCookie({name:c.name,value:c.value==null?'':String(c.value),domain:c.domain,path:c.path||'/',secure:!!c.secure,httpOnly:!!c.httpOnly,sameSite:(c.sameSite==='None')?'None':(c.sameSite==='Strict')?'Strict':'Lax'}); okc++; }catch(e){ failc++; } }
+        try{ logLine({t:nowISO(),type:'log',msg:'sessao restaurada: '+okc+'/'+_bu.cookies.length+' cookies de '+_bu.email+(failc?' ('+failc+' falharam)':'')}); }catch(_){}
+      } else { try{ logLine({t:nowISO(),type:'log',msg:'sem sessao p/ restaurar (buyer: '+((_bu&&_bu.email)||'nulo')+')'});}catch(_){} }
+    }
     const gql=[];
     page.on('response',async resp=>{ try{ const u=resp.url(); if(u.includes('/graphql')&&gql.length<60){ const t=await resp.text(); gql.push(t.slice(0,350)); } }catch(e){} });
     const fillField=async(sel,val)=>{ const el=await page.$(sel); if(!el) return false; const cur=await el.evaluate(n=>n.value); if(cur) return true; await el.click({clickCount:3}).catch(()=>{}); await coSleep(60); await el.type(String(val),{delay:30}); await el.evaluate(n=>n.dispatchEvent(new Event('blur',{bubbles:true}))).catch(()=>{}); await coSleep(120); return !!(await el.evaluate(n=>n.value)); };
