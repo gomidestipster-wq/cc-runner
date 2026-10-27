@@ -158,6 +158,7 @@ async function ensureBuyer(page){
     const first=parts[0], last=parts.slice(1).join(' ');
     try{ bl('bootstrap comprador: '+email); }catch(_){}
     let ok=false;
+    let sess=null;
     try{ await p2.goto('https://www.sandbox.paypal.com/signin',{waitUntil:'domcontentloaded',timeout:45000}); }catch(_){} await coSleep(6000);
     try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"],div,span')).filter(e=>e.offsetParent!==null&&/don.?t have an account|create an account|sign ?up|cadastre/i.test(String(e.textContent||'').trim())&&String(e.textContent||'').trim().length<50); if(els.length){ try{ els[els.length-1].click(); }catch(_){} } }); }catch(_){}
     for(let step=0; step<18; step++){
@@ -193,7 +194,7 @@ async function ensureBuyer(page){
       }catch(_){}
       if(/mobile-app/.test(state.url)){ try{ await p2.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"]')).filter(x=>x.offsetParent!==null&&/continue on web/i.test(String(x.innerText||'').trim())); if(els.length) els[els.length-1].click(); }); }catch(_){} continue; }
       try{ bl('boot s'+step+' | '+state.url.slice(0,64)+' | t:'+state.title.slice(0,26)+' | campos:'+JSON.stringify(state.inp).slice(0,240)+' | btns:'+state.btns.join(',').slice(0,110)+' | txt:'+String(state.txt||'').slice(0,150)); }catch(_){}
-      if(/\/wallet|\/marge|money\/flow|myaccount|onboarding\/(complete|success)|verifique.*email|confirm.*email|check.*email/i.test(state.url+' '+state.title)){ ok=true; break; }
+      if(/\/wallet|\/marge|money\/flow|myaccount|onboarding\/(complete|success)|verifique.*email|confirm.*email|check.*email/i.test(state.url+' '+state.title)){ ok=true; try{ sess={cookies:(await p2.cookies()).map(c=>({name:c.name,value:c.value,domain:c.domain,path:c.path,secure:!!c.secure,httpOnly:!!c.httpOnly,sameSite:(c.sameSite==='None')?'None':(c.sameSite==='Strict')?'Strict':'Lax'}))}; bl('boot SESSAO capturada: '+sess.cookies.length+' cookies de '+email); }catch(_){ sess=null; } break; }
       try{
         await p2.evaluate(({email,pw,first,last,street,apt})=>{
           const d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value');
@@ -229,7 +230,8 @@ async function ensureBuyer(page){
       const fsd=await p2.evaluate(()=>({url:location.href,title:document.title,inp:Array.from(document.querySelectorAll('input')).filter(x=>x.offsetParent!==null).map(x=>(x.id||x.name||'')+':'+(x.type||'')).slice(0,12),btn:Array.from(document.querySelectorAll('button,a,[role="button"]')).filter(x=>x.offsetParent!==null&&String(x.innerText||'').trim()).map(x=>String(x.innerText||'').trim().slice(0,24)).slice(0,8),txt:String(document.body.innerText||'').replace(/\s+/g,' ').slice(0,300)}));
       bl('boot fim | '+fsd.url.slice(0,70)+' | t:'+fsd.title.slice(0,30)+' | campos:'+fsd.inp.join(',').slice(0,240)+' | btns:'+fsd.btn.join(',').slice(0,140)+' | txt:'+fsd.txt.slice(0,260));
     }catch(_){}
-    ok=false;
+    if(!sess) ok=false;
+    if(!ok){
     try{
       await p2.goto('https://www.sandbox.paypal.com/signin',{waitUntil:'domcontentloaded',timeout:45000});
       await coSleep(5000);
@@ -252,8 +254,9 @@ async function ensureBuyer(page){
         }
       }
     }catch(e){ try{ bl('login verif err: '+String(e.message).slice(0,70)); }catch(_){} }
+    }
     try{ await p2.close(); }catch(_){}
-    saveBuyer({email,password:pw,first,last,ok:!!ok,try:Date.now()});
+    saveBuyer(Object.assign({email,password:pw,first,last,ok:!!ok,try:Date.now()},sess||{}));
   }catch(e){ try{ bl('bootstrap err: '+String(e.message).slice(0,80)); }catch(_){} }
   _booting=false;
   return readBuyer();
@@ -601,6 +604,7 @@ async function chargeCheckout(card, amount, currency, buyer, descriptor){
     if(mobProfile){ await page.setViewport({width:390,height:844,isMobile:true,hasTouch:true}); await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36').catch(()=>{}); }
     else { await page.setViewport({width:1280,height:1000}); await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36').catch(()=>{}); }
     await page.evaluateOnNewDocument(()=>{ try{ Object.defineProperty(navigator,'webdriver',{get:()=>undefined}); Object.defineProperty(navigator,'languages',{get:()=>['pt-BR','pt','en']}); }catch(e){} }).catch(()=>{});
+    { const _bu=readBuyer(); if(_bu&&Array.isArray(_bu.cookies)&&_bu.cookies.length){ try{ await page.setCookie(_bu.cookies.filter(c=>c.name&&c.domain).map(c=>({name:c.name,value:c.value,domain:c.domain,path:c.path||'/',secure:!!c.secure,httpOnly:!!c.httpOnly,sameSite:c.sameSite||'Lax'}))); logLine({t:nowISO(),type:'log',msg:'sessao restaurada: '+_bu.cookies.length+' cookies de '+_bu.email}); }catch(_){} } }
     const gql=[];
     page.on('response',async resp=>{ try{ const u=resp.url(); if(u.includes('/graphql')&&gql.length<60){ const t=await resp.text(); gql.push(t.slice(0,350)); } }catch(e){} });
     const fillField=async(sel,val)=>{ const el=await page.$(sel); if(!el) return false; const cur=await el.evaluate(n=>n.value); if(cur) return true; await el.click({clickCount:3}).catch(()=>{}); await coSleep(60); await el.type(String(val),{delay:30}); await el.evaluate(n=>n.dispatchEvent(new Event('blur',{bubbles:true}))).catch(()=>{}); await coSleep(120); return !!(await el.evaluate(n=>n.value)); };
