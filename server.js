@@ -321,33 +321,40 @@ async function apiFetch(u,o){
   const txt=await rr.text();
   return { status:rr.status, ok:rr.ok, raw:txt, json:async()=>{ try{return JSON.parse(txt);}catch(_){return {};} }, text:async()=>txt };
 }
+async function pxTest(c){
+  let ag;
+  try{ ag=new U.ProxyAgent('http://'+c,{connect:{timeout:7000}}); }catch(_){ return false; }
+  const b64=Buffer.from(((cfg.creds&&cfg.creds.clientId)||'')+':'+((cfg.creds&&cfg.creds.clientSecret)||'')).toString('base64');
+  let tokv=null;
+  for(let att=0; att<3 && !tokv; att++){
+    try{ const tr=await U.fetch('https://api-m.paypal.com/v1/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Authorization':'Basic '+b64},body:'grant_type=client_credentials',dispatcher:ag}); const tj=await tr.json().catch(()=>({})); tokv=tj.access_token||null; }catch(_){}
+    if(!tokv) await new Promise(r=>setTimeout(r,900));
+  }
+  if(!tokv){ try{ logLine({t:nowISO(),type:'log',msg:'proxy reprovado (token): '+c}); }catch(_){} ag.close().catch(()=>{}); return false; }
+  try{
+    const r=await U.fetch('https://api-m.paypal.com/v2/checkout/orders',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tokv,'PayPal-Request-Id':'pxs-'+Date.now()+'-'+Math.random().toString(36).slice(2,10)}, body:JSON.stringify({intent:'CAPTURE',purchase_units:[{amount:{currency_code:'BRL',value:'1.00'}}]}), dispatcher:ag });
+    const txt=await r.text().catch(()=>'');
+    if(r.status===201){ return true; }
+    try{ logLine({t:nowISO(),type:'log',msg:'proxy reprovado: '+c+' -> HTTP '+r.status+' '+txt.slice(0,60)}); }catch(_){}
+    return false;
+  }catch(e){ return false; } finally{ ag.close().catch(()=>{}); }
+}
 async function pxScan(){
   if(_px.busy||!U) return; _px.busy=true;
   try{
-    const sources=[
+    const tryOne=async(c,isManual)=>{
+      if(_px.active.some(x=>x.c===c)) return;
+      if(await pxTest(c)){ _px.active.push({c,fail:0}); if(!_px.pin){ _px.pin=c; if(!process.env.CC_PROXY) process.env.CC_PROXY=c; } try{ logLine({t:nowISO(),type:'log',msg:'proxy aprovado'+(isManual?' (manual)':'')+': '+c}); }catch(_){} }
+    };
+    const man=(Array.isArray(cfg.proxies)?cfg.proxies:[]).map(String).filter(x=>x.trim().indexOf(':')>-1);
+    for(const c of man){ if(pxAlive().length>=4) break; await tryOne(c.trim(),true); }
+    const seen=new Set(); const cands=[];
+    for(const fn of [
       async()=>{ const r=await fetch('https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&country=us&protocol=http&timeout=10000',{headers:{'User-Agent':'cc'},signal:AbortSignal.timeout(9000)}); const j=await r.json().catch(()=>[]); return Array.isArray(j)?j.map(x=>x.ip+':'+x.port):[]; },
       async()=>{ const r=await fetch('https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt',{headers:{'User-Agent':'cc'},signal:AbortSignal.timeout(9000)}); return (await r.text()).split('\n').map(x=>x.trim()).filter(x=>x.indexOf(':')>-1).slice(0,80); }
-    ];
-    const seen=new Set(); const cands=[];
-    for(const fn of sources){ try{ const l=await fn(); for(const c of l){ if(c&&!seen.has(c)){ seen.add(c); cands.push(c); } } }catch(_){} }
-    const CID=(cfg.creds&&cfg.creds.clientId)||''; const SEC=(cfg.creds&&cfg.creds.clientSecret)||'';
-    const b64=Buffer.from(CID+':'+SEC).toString('base64');
+    ]){ try{ const l=await fn(); for(const c of l){ if(c&&!seen.has(c)){ seen.add(c); cands.push(c); } } }catch(_){} }
     let tested=0;
-    for(const c of cands.slice(0,50)){
-      if(pxAlive().length>=4) break;
-      if(_px.active.some(x=>x.c===c)) continue;
-      tested++;
-      try{
-        const ag=new U.ProxyAgent('http://'+c,{connect:{timeout:7000}});
-        const t0=Date.now();
-        const r=await U.fetch('https://api-m.paypal.com/v2/checkout/orders',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+await new Promise(res=>{ const a=U.fetch('https://api-m.paypal.com/v1/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','Authorization':'Basic '+b64},body:'grant_type=client_credentials',dispatcher:ag}).then(x=>x.json()).then(j=>res(j.access_token)).catch(()=>res(null)); }),'PayPal-Request-Id':'pxs-'+Date.now()+'-'+Math.random().toString(36).slice(2,10)}, body:JSON.stringify({intent:'CAPTURE',purchase_units:[{amount:{currency_code:'BRL',value:'1.00'}}]}), dispatcher:ag });
-        const txt=await r.text().catch(()=>'');
-        await ag.close().catch(()=>{});
-        if(r.status===201){ _px.active.push({c,fail:0}); if(!_px.pin){ _px.pin=c; if(!process.env.CC_PROXY) process.env.CC_PROXY=c; } try{ logLine({t:nowISO(),type:'log',msg:'proxy aprovado ('+(Date.now()-t0)+'ms): '+c+(r.status===201?' -> ordem 201':'')}); }catch(_){} }
-        else { try{ logLine({t:nowISO(),type:'log',msg:'proxy reprovado: '+c+' -> HTTP '+r.status+' '+txt.slice(0,60)}); }catch(_){} }
-      }catch(e){ /* proxy morto */ }
-      if(tested>=25) break;
-    }
+    for(const c of cands.slice(0,50)){ if(pxAlive().length>=4) break; tested++; await tryOne(c,false); if(tested>=25) break; }
     try{ logLine({t:nowISO(),type:'log',msg:'varredura proxy fim: vivos='+pxAlive().length+' pin='+String(_px.pin||'-')}); }catch(_){}
   }catch(e){ try{ logLine({t:nowISO(),type:'log',msg:'varredura proxy err: '+String(e.message).slice(0,80)}); }catch(_){} } finally{ _px.busy=false; }
 }
@@ -1121,6 +1128,7 @@ function applyConfig(b) {
     maxErrStreak: clampI(b.maxErrStreak, cfg.maxErrStreak, 3, 500),
     fixAmount: !!b.fixAmount
   });
+  if (Array.isArray(b.proxies)) cfg.proxies = b.proxies.map(x => String(x).trim()).filter(Boolean).slice(0, 20);
   if (b.creds && typeof b.creds === 'object') {
     cfg.creds.clientId = str(b.creds.clientId);
     cfg.creds.clientSecret = str(b.creds.clientSecret);
