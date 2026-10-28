@@ -664,6 +664,10 @@ const signupTry=async()=>{
       try{ await page.waitForSelector(CARDSEL,{timeout:40000}); }catch(e){ let got=false;
         for(let rt=0; rt<2 && !got; rt++){ await coSleep(8000+Math.floor(Math.random()*4000)); try{ await page.goto(appr.href,{waitUntil:'domcontentloaded',timeout:45000}); await coSleep(6000); got=!!(await page.$(CARDSEL)); }catch(_){} }
         if(!got){ const bu=await ensureBuyer(page); const lo=(bu&&bu.email)?await tryBuyerLogin(page,CARDSEL):false; if(lo){ try{ await page.waitForSelector(CARDSEL,{timeout:8000}); }catch(_){} got=true; } }
+        if(!got){ try{
+          const clicked=await page.evaluate(()=>{ const els=Array.from(document.querySelectorAll('a,button,[role="button"],span')).filter(x=>x.offsetParent!==null&&!x.disabled); const t=els.find(x=>{ const v=String(x.innerText||'').trim(); return v.length<=40&&/^add (a |new )?card$|^use (a |your )?(new )?card$|^link a card$|^new (credit |debit )?card$|adicionar cart[aã]o/i.test(v); }); if(t){ try{t.scrollIntoView({block:'center'});}catch(_){} t.click(); return String(t.innerText||'').trim().slice(0,40);} return ''; });
+          if(clicked){ try{ logLine({t:nowISO(),type:'log',msg:'add-card clicado: '+clicked}); }catch(_){} await coSleep(5000+Math.floor(Math.random()*3000)); got=!!(await page.$(CARDSEL)); for(const fr of page.frames()){ try{ if(!got&&await fr.$(CARDSEL)){ got=true; break; } }catch(_){} } }
+        }catch(_){} }
         if(!got){ const su=await signupTry(); try{ await page.waitForSelector(CARDSEL,{timeout:25000}); got=true; }catch(_){} try{ logLine({t:nowISO(),type:'log',msg:'signup: '+String(su).slice(0,200)+' | url: '+page.url().slice(0,64)+' | tit: '+String(await page.title()).slice(0,40)}); }catch(_){} }
         if(!got){ let ti='',frames='',body=''; try{ ti=await page.title(); }catch(_){}
           try{ frames=page.frames().map(fr=>fr.url()).slice(0,4).join(' || ').slice(0,200); }catch(_){}
@@ -882,7 +886,9 @@ if(/challenge|3d secure|3ds/i.test(url+txt)){ try{ const mm=String(txt).match(/.
       return { ok:false, kind:'decline', message:'timeout na pagina da paypal', raw:{order:oid} };
     } finally { try{ await page.close(); }catch(e){} }
   } catch(e){
-    return { ok:false, kind:'error', message:'checkout: '+(e&&e.message?e.message:String(e)).slice(0,200), raw:{order:oid} };
+    const em=(e&&e.message)?e.message:String(e);
+    if(/Cannot find context|Target closed|browser has been closed|Session closed|Protocol error/i.test(em)){ try{ logLine({t:nowISO(),type:'log',msg:'navegador estourou no ciclo - reiniciando navegador: '+em.slice(0,80)}); }catch(_){} try{ if(_coBrowser){ await _coBrowser.close(); } }catch(_){} _coBrowser=null; }
+    return { ok:false, kind:'error', message:'checkout: '+em.slice(0,200), raw:{order:oid} };
   }
 }
 async function charge(mode, card, amount, currency, buyer, descriptor) {
