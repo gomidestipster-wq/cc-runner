@@ -296,6 +296,7 @@ async function tryBuyerLogin(page,CARDSEL){
 
 /* ------------------------- egress por proxy: desbloqueia a conta quando a API ve o IP da nuvem restrito ------------------------- */
 let U=null; try{ U=require('undici'); }catch(e){}
+const _pxOf=globalThis.fetch;
 const _px={ active:[], pin:null, busy:false };
 function pxAlive(){ return _px.active.filter(p=>(p.fail||0)<3); }
 function pickProxy(){ const L=pxAlive(); if(!L.length) return null; if(_px.pin && L.some(p=>p.c===_px.pin)) return _px.pin; return L[Math.floor(Math.random()*L.length)]; }
@@ -316,7 +317,7 @@ async function apiFetch(u,o){
       }catch(e){ pxMark(p,true); }
     }
   }
-  const rr=await fetch(u,o);
+  const rr=await _pxOf(u,o);
   const txt=await rr.text();
   return { status:rr.status, ok:rr.ok, raw:txt, json:async()=>{ try{return JSON.parse(txt);}catch(_){return {};} }, text:async()=>txt };
 }
@@ -351,7 +352,7 @@ async function pxScan(){
   }catch(e){ try{ logLine({t:nowISO(),type:'log',msg:'varredura proxy err: '+String(e.message).slice(0,80)}); }catch(_){} } finally{ _px.busy=false; }
 }
 if(U){
-  const _of=globalThis.fetch;
+  const _of=_pxOf;
   globalThis.fetch=(u,o)=>{
     const us=String((u&&u.url)?u.url:u);
     if(/proxyscrape|githubusercontent|spys\.one|openproxylist/i.test(us)) return _of(u,o);
