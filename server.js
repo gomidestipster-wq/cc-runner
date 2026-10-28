@@ -294,8 +294,9 @@ async function tryBuyerLogin(page,CARDSEL){
   }catch(e){ try{ logLine({t:nowISO(),type:'log',msg:'login comprador err: '+String(e.message).slice(0,60)}); }catch(_){} return false; }
 }
 
-async function ppToken(env) {
-  const c = PP_TOK[env];
+async function ppToken(env,cid) {
+  const k=env+'|'+String(cid||'');
+  const c = PP_TOK[k];
   if (c && c.exp > Date.now() + 60000) return c.value;
   const base = env === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
   const r = await fetch(base + '/v1/oauth2/token', {
@@ -308,7 +309,7 @@ async function ppToken(env) {
   });
   const j = await r.json().catch(() => ({}));
   if (!r.ok || !j.access_token) throw new Error('OAuth PayPal falhou: ' + ((j.message || j.error || ('HTTP ' + r.status))));
-  PP_TOK[env] = { value: j.access_token, exp: Date.now() + (j.expires_in || 10) * 1000 };
+  PP_TOK[k] = { value: j.access_token, exp: Date.now() + (j.expires_in || 10) * 1000 };
   return j.access_token;
 }
 function ppExp(e) {
@@ -321,7 +322,7 @@ function ppExp(e) {
   return e;
 }
 async function chargePaypal(card, amount, currency, buyer, descriptor) {
-  const token = await ppToken(cfg.env);
+  const token = await ppToken(cfg.env,(cfg.creds&&cfg.creds.clientId)||'');
   const base = cfg.env === 'live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
   const body = {
     intent: 'CAPTURE',
@@ -596,7 +597,7 @@ function ensureChrome(){
 async function chargeCheckout(card, amount, currency, buyer, descriptor){
   if(!cfg.creds.clientId||!cfg.creds.clientSecret) return { ok:false, kind:'error', message:'modo checkout precisa das chaves do PayPal (clientId/secret)', raw:{} };
   const www = cfg.env==='live' ? 'https://www.paypal.com' : 'https://www.sandbox.paypal.com';
-  const token = await ppToken(cfg.env);
+  const token = await ppToken(cfg.env,(cfg.creds&&cfg.creds.clientId)||'');
   const api = cfg.env==='live' ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
   const r1=await fetch(api+'/v2/checkout/orders',{ method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+token,'PayPal-Request-Id':'ccr-'+Date.now()+'-'+Math.random().toString(36).slice(2,12)}, body:JSON.stringify({ intent:'CAPTURE', purchase_units:[{ amount:{currency_code:currency,value:amount.toFixed(2)}, description:descriptor }] }) });
   const o=await r1.json().catch(()=>({}));
