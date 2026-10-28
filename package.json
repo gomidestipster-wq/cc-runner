@@ -2,7 +2,7 @@
  "name": "cc-runner",
  "version": "1.0.0",
  "private": true,
- "description": "Gerador + checker + drenador de cart\u00f5es com dados aleat\u00f3rios, para cobrar via PayPal/Braintree 24/7",
+ "description": "Gerador + checker + drenador de cartes com dados aleatorios, para cobrar via PayPal/Braintree 24/7",
  "main": "server.js",
  "scripts": {
   "start": "node server.js"
@@ -12,6 +12,7 @@
  },
  "dependencies": {
   "puppeteer-core": "^24.43.1",
-  "@puppeteer/browsers": "^2.4.0"
+  "@puppeteer/browsers": "^2.4.0",
+  "undici": "^6.19.8"
  }
 }
